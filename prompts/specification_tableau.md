@@ -24,6 +24,8 @@ Un seul objet JSON :
 
 `voix` (leçons uniquement) : ce que le professeur dit à voix haute pendant l'étape, lu par une voix de synthèse. 1 à 2 phrases, 30 mots au maximum, maths écrites comme on les dit (« e puissance x », « f prime »), sans `^{}`, sans symbole. L'étape dure au moins le temps de cette phrase.
 
+Synchronisation : place dans `voix` un repère `[1]`, `[2]`… juste avant les mots pendant lesquels l'action n° 1, n° 2… de l'étape doit apparaître (numérotation dans l'ordre des actions de l'étape). Exemple : « On trace [1]un repère, puis [2]la courbe de l'exponentielle. » Les repères ne sont pas lus. Une action sans repère suit la précédente.
+
 Les actions d'une étape se jouent l'une après l'autre ; `"en_meme_temps": true` lance une action en même temps que la précédente. Les éléments restent au tableau jusqu'à une action `effacer`. `duree_min` (secondes, facultatif) allonge une étape, par exemple la dernière.
 
 ## Actions disponibles

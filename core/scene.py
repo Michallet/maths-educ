@@ -7,6 +7,7 @@ actions de tracé jouées dans l'ordre. Le moteur JavaScript du tableau
 from __future__ import annotations
 
 import hashlib
+import re
 import json
 from typing import Any
 
@@ -71,7 +72,7 @@ SCENE_SCHEMA: dict[str, Any] = {
     "required": ["titre", "etapes"],
 }
 
-_NOMBRES = {"x", "y", "x0", "label_x", "xmin", "xmax", "ymin", "ymax", "pas_x", "pas_y", "longueur", "duree"}
+_NOMBRES = {"debut", "x", "y", "x0", "label_x", "xmin", "xmax", "ymin", "ymax", "pas_x", "pas_y", "longueur", "duree"}
 _BOOLEENS = {"grille", "pointille", "fleche", "encadre", "en_meme_temps"}
 _TEXTES = {"texte", "expr", "label"}
 
@@ -81,7 +82,9 @@ def _nombre(v: Any) -> float | None:
         n = float(str(v).replace(",", ".")) if isinstance(v, str) else float(v)
     except (TypeError, ValueError):
         return None
-    return n if n == n and abs(n) < 1e6 else None
+    if not (n == n and abs(n) < 1e6):
+        return None
+    return int(n) if n == int(n) else n
 
 
 def normaliser_action(brut: Any, alertes: list[str]) -> dict | None:
@@ -142,12 +145,19 @@ def normaliser_scene(brut: Any, max_etapes: int = 14, max_actions: int = 8) -> t
         if not isinstance(e, dict):
             continue
         actions = [a for a in (normaliser_action(x, alertes) for x in (e.get("actions") or [])[:max_actions]) if a]
-        etape: dict[str, Any] = {"sous_titre": str(e.get("sous_titre", ""))[:140], "actions": actions}
+        etape: dict[str, Any] = {"sous_titre": str(e.get("sous_titre", ""))[:140]}
         if str(e.get("voix", "")).strip():
             etape["voix"] = str(e["voix"]).strip()[:400]
+        # Ajoutés par la fabrication (fabriquer_lecon.py) : audio de l'étape et sa durée.
+        if isinstance(e.get("audio"), str) and re.fullmatch(r"medias/[\w-]+/\d+\.wav", e["audio"]):
+            etape["audio"] = e["audio"]
+            d = _nombre(e.get("duree_voix"))
+            if d:
+                etape["duree_voix"] = round(max(0.0, min(d, 60.0)), 2)
         d = _nombre(e.get("duree_min"))
         if d is not None:
             etape["duree_min"] = max(0.0, min(d, 15.0))
+        etape["actions"] = actions
         scene["etapes"].append(etape)
     if not scene["etapes"]:
         alertes.append("Scène sans étape.")
@@ -177,3 +187,11 @@ def resume_jusqua(scene: dict, etape: int) -> str:
                 traces.append("repère")
         lignes.append(f"{i + 1}. « {e.get('sous_titre', '')} »" + (f" — tableau : {', '.join(traces)}" if traces else ""))
     return "\n".join(lignes)
+
+
+def formater_scene(scene: dict) -> str:
+    """JSON lisible : une action par ligne (plus facile à relire et à comparer dans git)."""
+    txt = json.dumps(scene, ensure_ascii=False, indent=2)
+    txt = re.sub(r"\[\n\s+(-?[\d.]+),\n\s+(-?[\d.]+)\n\s+\]", r"[\1, \2]", txt)
+    txt = re.sub(r'\{\n\s+"type"(.*?)\n\s+\}', lambda m: '{"type"' + re.sub(r"\n\s+", " ", m.group(1)) + "}", txt, flags=re.S)
+    return txt + "\n"

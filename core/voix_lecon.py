@@ -1,10 +1,7 @@
-"""Voix off de la leçon : un extrait audio par étape, synthétisé en parallèle."""
+"""Texte lu par la voix off : conversion en toutes lettres et repères de synchronisation [n]."""
 from __future__ import annotations
 
 import re
-import threading
-import time
-from concurrent.futures import ThreadPoolExecutor
 
 _REMPLACEMENTS = [
     (r"\^\{?2\}?", " au carré"),
@@ -27,59 +24,29 @@ _REMPLACEMENTS = [
 
 
 def texte_parle(etape: dict) -> str:
-    """Texte à lire pour une étape : le champ `voix`, sinon le sous-titre mis en toutes lettres."""
+    """Texte à lire pour une étape, sans repères : le champ `voix`, sinon le sous-titre en toutes lettres."""
     if etape.get("voix"):
-        return etape["voix"]
+        return separer_reperes(etape["voix"])[0]
     t = etape.get("sous_titre", "")
     for motif, rempl in _REMPLACEMENTS:
         t = re.sub(motif, rempl, t)
     return re.sub(r"\s+", " ", t).strip()
 
 
-def generer_voix_lecon(moteur, scene: dict) -> tuple[list[bytes | None], list[str]]:
-    """Renvoie (un WAV ou None par étape, erreurs)."""
-    textes = [texte_parle(e) for e in scene.get("etapes", [])]
-    erreurs: list[str] = []
-
-    def un(texte: str) -> bytes | None:
-        if not texte:
-            return None
-        try:
-            return moteur.voix(texte)
-        except Exception as e:  # noqa: BLE001
-            erreurs.append(f"« {texte[:40]}… » : {e}")
-            return None
-
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        wavs = list(pool.map(un, textes))
-    return wavs, erreurs
+REPERE = re.compile(r"\[(\d+)\]")
 
 
-# ---------------------------------------------------------------- préparation en arrière-plan
-_TACHES: dict[str, dict] = {}
-_VERROU = threading.Lock()
-
-
-def voix_en_arriere_plan(cle: str, moteur, scene: dict) -> dict:
-    """Lance la synthèse si besoin et renvoie l'état de la tâche, sans jamais attendre :
-    {"etat": "en_cours" | "pret", "wavs": [...], "erreurs": [...], "debut": t}."""
-    with _VERROU:
-        tache = _TACHES.get(cle)
-        if tache is None:
-            tache = {"etat": "en_cours", "wavs": None, "erreurs": [], "debut": time.time()}
-            _TACHES[cle] = tache
-
-            def travail():
-                try:
-                    wavs, erreurs = generer_voix_lecon(moteur, scene)
-                except Exception as e:  # noqa: BLE001
-                    wavs, erreurs = [], [str(e)]
-                tache.update(wavs=wavs, erreurs=erreurs, etat="pret")
-
-            threading.Thread(target=travail, daemon=True).start()
-        return tache
-
-
-def oublier_voix(cle: str) -> None:
-    with _VERROU:
-        _TACHES.pop(cle, None)
+def separer_reperes(voix: str) -> tuple[str, dict[int, float]]:
+    """« On trace [1]un repère, puis [2]la courbe » → (texte sans repères, {1: 0.13, 2: 0.55}).
+    La valeur est la position du repère dans le texte, en fraction de sa longueur :
+    une bonne approximation du moment où le mot est prononcé."""
+    positions: dict[int, int] = {}
+    propre, i = "", 0
+    for m in REPERE.finditer(voix):
+        propre += voix[i:m.start()]
+        positions.setdefault(int(m.group(1)), len(propre))
+        i = m.end()
+    propre += voix[i:]
+    propre = re.sub(r"\s+", " ", propre).strip()
+    n = max(1, len(propre))
+    return propre, {k: min(1.0, v / n) for k, v in positions.items()}

@@ -356,7 +356,8 @@
         try {
           var type = a.type;
           var dur = num(a.duree, DUREES[type] || .6);
-          var ts = a.en_meme_temps ? prevDebut : cur;
+          // `debut` (s depuis le début de l'étape) : posé par la fabrication pour caler l'action sur la voix.
+          var ts = a.debut !== undefined && isFinite(Number(a.debut)) ? debut + Number(a.debut) : a.en_meme_temps ? prevDebut : cur;
           prevDebut = ts;
           var fin = ts + dur;
           if (type === 'repere') {
@@ -508,7 +509,7 @@
       var lecture = etape.sous_titre ? Math.max(2.2, .8 + .36 * mots) : 0;
       var voix = num(etape.duree_voix, 0);
       var fin = Math.max(cur + .5, debut + lecture, debut + num(etape.duree_min, 0), voix ? debut + voix + .35 : 0);
-      etapes.push({ debut: debut, fin: fin, sous_titre: etape.sous_titre || '' });
+      etapes.push({ debut: debut, fin: fin, sous_titre: etape.sous_titre || '', duree_voix: voix, audio: etape.audio || null });
       t = fin;
     });
 
@@ -577,7 +578,7 @@
   var ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';
   var ICON_REPLAY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>';
 
-  var etat = { mode: 'lecon', lecon: null, reponse: null, t: 0, tLecon: 0, joue: false, leconId: null, reponseId: null, compteur: 0, audio: null, voixLecon: [], voixId: null, muet: false, dernierEvt: {} };
+  var etat = { mode: 'lecon', lecon: null, reponse: null, t: 0, tLecon: 0, joue: false, leconId: null, reponseId: null, compteur: 0, audio: null, voixLecon: [], muet: false, dernierEvt: {} };
   window.__etat = etat;  // débogage depuis la console
   var btnSon = document.getElementById('btn-son');
   var ICON_SON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
@@ -721,7 +722,7 @@
 
   // ---------- Protocole des composants Streamlit ----------
   function envoyer(type, data) { window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data || {}), '*'); }
-  function setValeur(v) { envoyer('streamlit:setComponentValue', { value: Object.assign({}, v, { voix_lecon: etat.voixId }), dataType: 'json' }); }
+  function setValeur(v) { envoyer('streamlit:setComponentValue', { value: v, dataType: 'json' }); }
   function hauteur() { envoyer('streamlit:setFrameHeight', { height: Math.ceil(document.getElementById('player').getBoundingClientRect().height) + 8 }); }
   new ResizeObserver(hauteur).observe(document.body);
 
@@ -742,42 +743,21 @@
   function surRendu(args, theme) {
     appliquerTheme(theme);
     file = file.then(function () { return policesPretes; }).then(function () {
-      // Voix off en préparation côté serveur : on redemande dans 3 s (provoque une réexécution).
-      if (args.voix_statut === 'en_cours' && !etat.minuteurVoix) {
-        etat.minuteurVoix = setTimeout(function () {
-          etat.minuteurVoix = null;
-          setValeur(Object.assign({}, etat.dernierEvt, { attente_voix: Date.now() }));
-        }, 3000);
-      }
-      var voixRecue = args.voix && args.voix_id && args.voix_id !== etat.voixId;
-      if (args.lecon && (args.lecon_id !== etat.leconId || voixRecue)) {
-        var memeLecon = args.lecon_id === etat.leconId;
+      if (args.lecon && args.lecon_id !== etat.leconId) {
         etat.leconId = args.lecon_id;
         voixStop();
-        var scene = JSON.parse(JSON.stringify(args.lecon));
-        etat.voixLecon = [];
-        if (voixRecue) {
-          etat.voixId = args.voix_id;
-          (scene.etapes || []).forEach(function (e, k) {
-            var b64 = args.voix[k], d = Number((args.voix_durees || [])[k] || 0);
-            if (!b64 || !d) { etat.voixLecon.push(null); return; }
-            e.duree_voix = d;
-            var a = new Audio('data:audio/wav;base64,' + b64); a.preload = 'auto';
-            etat.voixLecon.push(a);
-          });
-          setValeur(etat.dernierEvt);  // confirme la réception : Python arrête d'envoyer l'audio
-        } else if (!args.voix_id) {
-          etat.voixId = null;
-        }
         var visible = calqueLecon.style.display; calqueLecon.style.display = '';
-        etat.lecon = construire(scene, calqueLecon, 'lecon');
-        etat.lecon.etapes.forEach(function (e, k) { e.duree_voix = (scene.etapes[k] || {}).duree_voix || 0; });
+        etat.lecon = construire(args.lecon, calqueLecon, 'lecon');
         calqueLecon.style.display = visible;
-        if (!memeLecon) { etat.mode = 'lecon'; etat.t = 0; etat.tLecon = 0; etat.joue = false; }
+        // Voix off fabriquée à l'avance : un fichier par étape, servi à côté de cette page.
+        etat.voixLecon = etat.lecon.etapes.map(function (e) {
+          if (!e.audio || !e.duree_voix) return null;
+          // ?v= : un fichier refabriqué porte le même nom, on contourne le cache du navigateur.
+          var a = new Audio(e.audio + '?v=' + etat.leconId); a.preload = 'auto';
+          return a;
+        });
+        etat.mode = 'lecon'; etat.t = 0; etat.tLecon = 0; etat.joue = false;
         appliquerMuet();
-      } else if (args.voix_id && args.voix_id !== etat.voixId && !args.voix) {
-        // Python croit l'audio déjà chargé (iframe recréée) : on le redemande.
-        etat.voixId = null; setValeur(etat.dernierEvt);
       }
       if (args.reponse && args.reponse_id && args.reponse_id !== etat.reponseId) {
         etat.reponseId = args.reponse_id;

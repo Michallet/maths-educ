@@ -17,7 +17,7 @@ from core.moteur import MoteurDemo, Reglages, creer_moteur
 from core.prompts import (lire_lecon, lire_scene, lister_lecons, message_question, systeme_lecon_vers_scene,
                           systeme_reponse_orale, systeme_reponse_tableau)
 from core.scene import empreinte, normaliser_scene, resume_jusqua
-from core.voix_lecon import oublier_voix, voix_en_arriere_plan
+from core.fabrication import ecrire, fabriquer, zipper
 from tableau import tableau
 
 st.set_page_config(page_title="Prof de maths IA", page_icon="📐", layout="wide")
@@ -46,6 +46,7 @@ def charger_lecon(nom: str) -> None:
     ss.scene_lecon = normaliser_scene(scene)[0] if scene else None
     ss.reponse = None
     ss.historique = []
+    ss.fabrication = None
 
 
 # ---------------------------------------------------------------- état initial
@@ -116,26 +117,32 @@ with st.sidebar:
         st.download_button("⬇️ Télécharger la scène", json.dumps(ss.scene_lecon, ensure_ascii=False, indent=2),
                            file_name=f"{ss.lecon_nom}.scene.json", mime="application/json", width="stretch")
 
-    voix_off = st.toggle("🔊 Voix off de la leçon", value=True, key="voix_off")
-    # La voix off se prépare en arrière-plan : la leçon s'affiche tout de suite, sans le son,
-    # et le tableau redemande régulièrement si la voix est prête.
-    voix_wavs, voix_id, voix_statut = None, None, None
-    if ss.scene_lecon and voix_off:
-        scene_json = json.dumps(ss.scene_lecon, ensure_ascii=False, sort_keys=True)
-        cle_voix = empreinte([scene_json, moteur.nom, reglages.modele_tts, reglages.voix, reglages.cle[-6:]])
-        tache = voix_en_arriere_plan(cle_voix, moteur, ss.scene_lecon)
-        if tache["etat"] == "en_cours":
-            voix_statut = "en_cours"
-            st.caption(f"🎙️ Voix off en préparation ({time.time() - tache['debut']:.0f} s)… "
-                       "La leçon est déjà lisible, le son arrivera tout seul.")
-        else:
-            if tache["erreurs"]:
-                st.warning(f"Voix off : {len(tache['erreurs'])} étape(s) sans son. {tache['erreurs'][0]}")
-                if st.button("Réessayer la voix off", width="stretch"):
-                    oublier_voix(cle_voix)
+    # Voix off : fabriquée une fois pour toutes (ici ou avec fabriquer_lecon.py), puis lue depuis des fichiers.
+    if ss.scene_lecon:
+        sans_voix = sum(1 for e in ss.scene_lecon["etapes"] if not e.get("audio"))
+        with st.expander("🎙️ Voix off de la leçon", expanded=sans_voix > 0):
+            if sans_voix:
+                st.caption(f"{sans_voix} étape(s) sans voix. Fabrique-la une fois : la synthèse, le calage des "
+                           "tracés sur la voix, puis télécharge le résultat pour le commiter.")
+            else:
+                st.caption("Voix prête : elle est lue depuis les fichiers du dépôt.")
+            if st.button("Fabriquer la voix", width="stretch"):
+                barre = st.progress(0.0, "Préparation…")
+                try:
+                    scene, fichiers, alertes = fabriquer(ss.lecon_nom, moteur, scene=ss.scene_lecon,
+                                                         progression=lambda m, f: barre.progress(f, m))
+                    ecrire(fichiers, ss.lecon_nom)  # servi tout de suite (disque temporaire sur le Cloud)
+                    ss.scene_lecon, ss.reponse = scene, None
+                    ss.fabrication = zipper(fichiers)
+                    for a in alertes:
+                        st.warning(a)
                     st.rerun()
-            if tache["wavs"] and any(tache["wavs"]):
-                voix_wavs, voix_id = tache["wavs"], cle_voix
+                except Exception as e:  # noqa: BLE001
+                    st.error(f"Fabrication impossible : {e}")
+            if ss.get("fabrication"):
+                st.download_button("⬇️ Télécharger la leçon fabriquée (.zip)", ss.fabrication,
+                                   file_name=f"{ss.lecon_nom}.zip", mime="application/zip", width="stretch",
+                                   help="À dézipper à la racine du dépôt, puis commiter.")
 
 # ---------------------------------------------------------------- page principale
 st.title("📐 Prof de maths IA")
@@ -161,11 +168,8 @@ def afficher_tableau(reponse: dict | None, reponse_id: str | None, nouvelle: boo
         return
     rendu["fait"] = True
     with col_tableau:
-        # La voix off (~1 Mo) n'est envoyée que tant que le tableau n'a pas confirmé l'avoir reçue.
-        deja = (ss.get("tableau") or {}).get("voix_lecon") == voix_id
         tableau(ss.scene_lecon, lecon_id, reponse=reponse, reponse_id=reponse_id, nouvelle_reponse=nouvelle,
-                audio=audio if nouvelle else None, voix=voix_wavs, voix_id=voix_id, envoyer_voix=not deja,
-                voix_statut=voix_statut)
+                audio=audio if nouvelle else None)
 
 
 with col_qr:
