@@ -56,5 +56,5 @@ Les latences de chaque étape s'affichent sous la réponse.
 
 ## Modèles par défaut (modifiables dans la barre latérale)
 
-- Texte, tableau et transcription : `gemini-3.6-flash`, réflexion `minimal` pour la latence.
+- Texte, tableau et transcription : `gemini-3.5-flash-lite` (réflexion `minimal`). Les erreurs 503 et 429 sont retentées automatiquement deux fois.
 - Voix : `gemini-3.8-flash-lite-tts` (voix « Charon »). Passe à `gemini-3.8-flash-tts` pour plus de qualité.

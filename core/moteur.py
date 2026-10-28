@@ -21,8 +21,8 @@ STYLE_VOIX = "Professeur de maths bienveillant et enthousiaste, voix claire, dé
 @dataclass
 class Reglages:
     cle: str = ""
-    modele_texte: str = "gemini-3.6-flash"
-    modele_stt: str = "gemini-3.6-flash"
+    modele_texte: str = "gemini-3.5-flash-lite"
+    modele_stt: str = "gemini-3.5-flash-lite"
     modele_tts: str = "gemini-3.8-flash-lite-tts"
     voix: str = "Charon"
     reflexion: str = "minimal"  # minimal | low | medium | high | "" (défaut du modèle)
@@ -49,15 +49,23 @@ class MoteurGemini:
             cfg["thinking_config"] = types.ThinkingConfig(thinking_level=self.r.reflexion)
         return types.GenerateContentConfig(**cfg)
 
-    def _appel(self, fn):
-        """Exécute fn() ; si le niveau de réflexion est refusé par le modèle, réessaie sans."""
-        try:
-            return fn()
-        except Exception as e:  # noqa: BLE001
-            if self._reflexion_ok and "think" in str(e).lower():
-                self._reflexion_ok = False
+    def _appel(self, fn, essais: int = 3):
+        """Exécute fn(). Réessaie sans réflexion si le niveau est refusé, et après une
+        courte pause si le modèle est surchargé (503 / 429)."""
+        for i in range(essais):
+            try:
                 return fn()
-            raise
+            except Exception as e:  # noqa: BLE001
+                msg = str(e).lower()
+                if self._reflexion_ok and "think" in msg:
+                    self._reflexion_ok = False
+                    continue
+                surcharge = any(k in msg for k in ("503", "unavailable", "overloaded", "429", "resource_exhausted"))
+                if surcharge and i < essais - 1:
+                    time.sleep(0.6 * (i + 1))
+                    continue
+                raise
+        return fn()
 
     # -- 1. Speech-to-text ------------------------------------------------------
     def transcrire(self, audio: bytes, mime: str = "audio/wav") -> str:

@@ -62,8 +62,8 @@ with st.sidebar:
     cle = st.text_input("Clé API Gemini", value=cle_secrets(), type="password",
                         help="Laisse vide pour le mode démo (réponses préparées, sans appel réseau).")
     with st.expander("Modèles", expanded=False):
-        modele_texte = st.text_input("Réflexion + tableau", "gemini-3.6-flash")
-        modele_stt = st.text_input("Transcription (STT)", "gemini-3.6-flash")
+        modele_texte = st.text_input("Réflexion + tableau", "gemini-3.5-flash-lite")
+        modele_stt = st.text_input("Transcription (STT)", "gemini-3.5-flash-lite")
         modele_tts = st.text_input("Voix (TTS)", "gemini-3.8-flash-lite-tts",
                                    help="gemini-3.8-flash-tts : meilleure qualité ; -lite : plus rapide.")
         voix = st.selectbox("Voix du prof", VOIX)
