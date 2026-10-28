@@ -12,14 +12,13 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from core.audio import duree_wav
+from core.audio import concatener_wav
 from core.scene import normaliser_scene
 
 
 class Affichage(Protocol):
     def texte(self, texte: str, fini: bool) -> None: ...
-    def tableau(self, scene: dict | None) -> None: ...
-    def audio(self, index: int, wav: bytes) -> None: ...
+    def tableau(self, scene: dict | None, audio: bytes | None) -> None: ...
     def alerte(self, message: str) -> None: ...
 
 
@@ -27,7 +26,7 @@ class Affichage(Protocol):
 class Resultat:
     texte: str = ""
     scene: dict | None = None
-    audios: list[bytes] = field(default_factory=list)
+    audio: bytes | None = None
     latences: dict[str, float] = field(default_factory=dict)
     alertes: list[str] = field(default_factory=list)
 
@@ -73,12 +72,14 @@ def repondre(moteur, systeme_oral: str, systeme_tableau: str, message: str, avec
 
     voix: list[Future] = []
     envoye = 0          # nombre de caractères déjà confiés à la synthèse vocale
-    a_jouer = 0         # prochain morceau audio à lancer
-    fin_lecture = 0.0   # instant (perf_counter) où le morceau en cours se termine
-    texte_fini = tableau_fini = False
+    texte_fini = scene_prete = tableau_envoye = False
 
     def lancer_voix(extrait: str):
         voix.append(pool.submit(moteur.voix, extrait.strip()))
+
+    def scene_de_secours() -> dict:
+        # Le tableau porte la voix : s'il n'y a pas de scène, on joue la voix sur un tableau vide.
+        return {"titre": "Ta question", "etapes": [{"sous_titre": "", "actions": []}]}
 
     try:
         while True:
@@ -114,37 +115,37 @@ def repondre(moteur, systeme_oral: str, systeme_tableau: str, message: str, avec
                 except Exception as e:  # noqa: BLE001
                     res.alertes.append(f"Tableau invalide : {e}")
                     ui.alerte(res.alertes[-1])
-                marquer("tableau prêt")
-                tableau_fini = True
-                ui.tableau(res.scene)
+                marquer("scène du tableau prête")
+                scene_prete = True
             elif nom == "tableau_err":
-                tableau_fini = True
+                scene_prete = True
                 res.alertes.append(f"Tableau : {val}")
                 ui.alerte(res.alertes[-1])
-                ui.tableau(None)
 
-            # Lecture des morceaux de voix, dans l'ordre, sans chevauchement.
-            while a_jouer < len(voix) and voix[a_jouer].done() and time.perf_counter() >= fin_lecture - 0.1:
-                try:
-                    wav = voix[a_jouer].result()
-                    if a_jouer == 0:
-                        marquer("début de la voix")
-                    ui.audio(a_jouer, wav)
-                    res.audios.append(wav)
-                    fin_lecture = time.perf_counter() + duree_wav(wav)
-                except Exception as e:  # noqa: BLE001
-                    res.alertes.append(f"Voix : {e}")
-                    ui.alerte(res.alertes[-1])
-                a_jouer += 1
+            # Le tableau part quand la scène ET toute la voix sont prêtes : il les joue ensemble.
+            voix_prete = not avec_voix or (texte_fini and all(f.done() for f in voix))
+            if not tableau_envoye and scene_prete and voix_prete:
+                morceaux = []
+                for f in voix:
+                    try:
+                        morceaux.append(f.result())
+                    except Exception as e:  # noqa: BLE001
+                        res.alertes.append(f"Voix : {e}")
+                        ui.alerte(res.alertes[-1])
+                res.audio = concatener_wav(morceaux)
+                if res.scene is None and res.audio:
+                    res.scene = scene_de_secours()
+                ui.tableau(res.scene, res.audio)
+                tableau_envoye = True
+                marquer("tableau + voix lancés" if res.audio else "tableau lancé")
 
-            voix_finie = not avec_voix or (texte_fini and a_jouer >= len(voix))
-            if texte_fini and tableau_fini and voix_finie:
+            if tableau_envoye and texte_fini:
                 break
             if time.perf_counter() - t0 > 90:
                 res.alertes.append("Délai dépassé (90 s).")
                 ui.alerte(res.alertes[-1])
-                if not tableau_fini:
-                    ui.tableau(None)
+                if not tableau_envoye:
+                    ui.tableau(res.scene, None)
                 break
     finally:
         pool.shutdown(wait=False, cancel_futures=True)

@@ -12,7 +12,6 @@ import time
 
 import streamlit as st
 
-from core.audio import concatener_wav
 from core.chaine import repondre
 from core.moteur import MoteurDemo, Reglages, creer_moteur
 from core.prompts import (lire_lecon, lire_scene, lister_lecons, message_question, systeme_lecon_vers_scene,
@@ -134,13 +133,14 @@ col_tableau, col_qr = st.columns([5, 6], gap="large")
 rendu = {"fait": False}
 
 
-def afficher_tableau(reponse: dict | None, reponse_id: str | None, nouvelle: bool) -> None:
+def afficher_tableau(reponse: dict | None, reponse_id: str | None, nouvelle: bool, audio: bytes | None = None) -> None:
     """Le composant doit être rendu une seule fois par exécution du script."""
     if rendu["fait"]:
         return
     rendu["fait"] = True
     with col_tableau:
-        tableau(ss.scene_lecon, lecon_id, reponse=reponse, reponse_id=reponse_id, nouvelle_reponse=nouvelle)
+        tableau(ss.scene_lecon, lecon_id, reponse=reponse, reponse_id=reponse_id, nouvelle_reponse=nouvelle,
+                audio=audio if nouvelle else None)
 
 
 with col_qr:
@@ -192,18 +192,14 @@ with col_qr:
 
         with st.chat_message("assistant", avatar="🧑‍🏫"):
             zone_texte = st.empty()
-            zones_audio = [st.empty() for _ in range(4)]
             zone_alertes = st.container()
 
         class UI:
             def texte(self, texte: str, fini: bool) -> None:
                 zone_texte.markdown(texte + ("" if fini else " ▌"))
 
-            def tableau(self, scene: dict | None) -> None:
-                afficher_tableau(scene, reponse_id if scene else None, scene is not None)
-
-            def audio(self, index: int, wav: bytes) -> None:
-                zones_audio[min(index, len(zones_audio) - 1)].audio(wav, format="audio/wav", autoplay=True)
+            def tableau(self, scene: dict | None, audio: bytes | None) -> None:
+                afficher_tableau(scene, reponse_id if scene else None, scene is not None, audio)
 
             def alerte(self, message: str) -> None:
                 zone_alertes.warning(message)
@@ -213,7 +209,7 @@ with col_qr:
         afficher_tableau(None, None, False)
         latences.update(res.latences)
         ss.reponse = {"question": question, "texte": res.texte, "scene": res.scene,
-                      "id": reponse_id if res.scene else None, "audio": concatener_wav(res.audios),
+                      "id": reponse_id if res.scene else None,
                       "latences": latences, "alertes": res.alertes, "moteur": moteur.nom}
         ss.historique.append((question, res.texte))
         ss.n_audio += 1  # vide l'enregistreur à la prochaine exécution
@@ -228,8 +224,6 @@ with col_qr:
                 st.markdown(r["question"])
             with st.chat_message("assistant", avatar="🧑‍🏫"):
                 st.markdown(r["texte"] or "_(pas de réponse)_")
-                if r["audio"]:
-                    st.audio(r["audio"], format="audio/wav")
                 for a in r["alertes"]:
                     st.warning(a)
             with st.expander(f"⏱️ Latences ({r['moteur']})"):

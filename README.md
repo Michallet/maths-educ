@@ -36,8 +36,9 @@ Pour une nouvelle leçon : copie `_modele.md` sous un nouveau nom dans `lecons/`
 3. **Deux appels Gemini en parallèle** :
    - la réponse orale du prof, en streaming (`prompts/reponse_orale.md`) ;
    - la scène du tableau en JSON structuré (`prompts/reponse_tableau.md`, schéma dans `core/scene.py`).
-4. **TTS** : dès que la première phrase est complète, elle part en synthèse vocale ; le reste suit à la fin du texte. Les morceaux sont joués à la suite.
-5. Le tableau affiche la réponse dès qu'elle arrive ; **▶ Reprendre la leçon** revient à l'endroit de la pause.
+4. **TTS** : dès que la première phrase est complète, elle part en synthèse vocale ; le reste suit à la fin du texte.
+5. **Le tableau joue la voix** : quand la scène et la voix sont prêtes, le tableau lance les deux ensemble, sur la durée la plus longue des deux. Pause, déplacement dans la vidéo et « rejouer » pilotent aussi la voix. Sans voix (option désactivée), le tableau part dès que la scène est prête.
+6. **▶ Reprendre la leçon** revient à l'endroit de la pause.
 
 Les latences de chaque étape s'affichent sous la réponse.
 

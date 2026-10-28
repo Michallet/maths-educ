@@ -575,7 +575,24 @@
   var ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';
   var ICON_REPLAY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>';
 
-  var etat = { mode: 'lecon', lecon: null, reponse: null, t: 0, tLecon: 0, joue: false, leconId: null, reponseId: null, compteur: 0 };
+  var etat = { mode: 'lecon', lecon: null, reponse: null, t: 0, tLecon: 0, joue: false, leconId: null, reponseId: null, compteur: 0, audio: null };
+
+  // ---------- Voix de la réponse : jouée par le tableau, calée sur la timeline ----------
+  function voixActive() { return etat.mode === 'reponse' && etat.audio ? etat.audio : null; }
+  function voixParle() { var a = voixActive(); return !!(a && !a.paused && !a.ended); }
+  function voixCaler() {
+    var a = voixActive(); if (!a) return;
+    try { if (isFinite(a.duration) && etat.t >= a.duration) { a.pause(); return; } a.currentTime = etat.t; } catch (e) { }
+  }
+  function voixJouer() {
+    var a = voixActive(); if (!a) return;
+    voixCaler();
+    if (isFinite(a.duration) && etat.t >= a.duration) return;
+    var pr = a.play();
+    // Lecture refusée par le navigateur (autoplay) : on met en pause, le bouton ▶ relance tout.
+    if (pr && pr.catch) pr.catch(function () { etat.joue = false; majUI(); });
+  }
+  function voixStop() { if (etat.audio) { try { etat.audio.pause(); } catch (e) { } } }
   function tl() { return etat.mode === 'lecon' ? etat.lecon : etat.reponse; }
 
   function fmt(s) { s = Math.floor(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
@@ -609,7 +626,7 @@
     var ang = ecrit && etat.joue ? -8 + 6 * Math.sin(maintenant * .02) : 0;
     arm.setAttribute('transform', 'rotate(' + ang.toFixed(2) + ')');
     // Bouche : parle quand un sous-titre est affiché
-    var parle = etat.joue && op > .5;
+    var parle = etat.joue && (voixActive() ? voixParle() : op > .5);
     var sy = parle ? .35 + .85 * Math.abs(Math.sin(maintenant * .024)) : .35;
     mouth.setAttribute('transform', 'translate(50 86) scale(1 ' + sy.toFixed(2) + ') translate(-50 -86)');
     // Sourcils : se lèvent au début de chaque étape
@@ -625,18 +642,19 @@
     var dt = (now - dernier) / 1000; dernier = now;
     var T = tl();
     if (etat.joue && T) {
-      etat.t += Math.min(dt, .1);
-      if (etat.t >= T.duree) { etat.t = T.duree; etat.joue = false; majUI(); }
+      // La voix sert d'horloge tant qu'elle joue (pas de dérive entre le son et le tableau).
+      if (voixParle()) etat.t = voixActive().currentTime; else etat.t += Math.min(dt, .1);
+      if (etat.t >= T.duree) { etat.t = T.duree; etat.joue = false; voixStop(); majUI(); }
     }
     rendre();
     clignement(now);
     requestAnimationFrame(boucle);
   }
 
-  function jouer() { var T = tl(); if (!T) return; if (etat.t >= T.duree) etat.t = 0; etat.joue = true; majUI(); }
+  function jouer() { var T = tl(); if (!T) return; if (etat.t >= T.duree) etat.t = 0; etat.joue = true; voixJouer(); majUI(); }
   function pause(signaler) {
     var etaitEnLecture = etat.joue;
-    etat.joue = false; majUI();
+    etat.joue = false; voixStop(); majUI();
     if (signaler && etat.mode === 'lecon' && etaitEnLecture) envoyerPosition('pause');
   }
   function basculer() { etat.joue ? pause(true) : jouer(); }
@@ -653,10 +671,10 @@
   overlay.addEventListener('click', function (e) { e.stopPropagation(); jouer(); });
   btnPlay.addEventListener('click', basculer);
   btnReplay.addEventListener('click', function () { etat.t = 0; rendre(); jouer(); });
-  scrub.addEventListener('input', function () { etat.t = Number(scrub.value) / 1000; rendre(); majUI(); });
+  scrub.addEventListener('input', function () { etat.t = Number(scrub.value) / 1000; if (etat.joue) voixJouer(); else voixCaler(); rendre(); majUI(); });
   btnQuestion.addEventListener('click', function () { etat.joue = false; majUI(); envoyerPosition('question'); });
   btnReprendre.addEventListener('click', function () {
-    etat.mode = 'lecon'; etat.t = etat.tLecon; majUI(); rendre(); jouer();
+    voixStop(); etat.mode = 'lecon'; etat.t = etat.tLecon; majUI(); rendre(); jouer();
     etat.compteur++; setValeur({ evenement: 'reprise', n: etat.compteur });
   });
   document.addEventListener('keydown', function (e) {
@@ -699,7 +717,14 @@
           if (etat.mode === 'lecon') etat.tLecon = etat.t;
           calqueReponse.style.display = '';
           etat.reponse = construire(args.reponse, calqueReponse, 'reponse');
-          etat.mode = 'reponse'; etat.t = 0; etat.joue = true;
+          voixStop(); etat.audio = null;
+          if (args.audio) {
+            etat.audio = new Audio('data:audio/wav;base64,' + args.audio);
+            etat.audio.preload = 'auto';
+            // Durée de la réponse = la plus longue entre la scène et la voix.
+            etat.reponse.duree = Math.max(etat.reponse.duree, Number(args.duree_audio || 0) + .4);
+          }
+          etat.mode = 'reponse'; etat.t = 0; jouer();
         }
       }
       majUI(); rendre(); hauteur();
