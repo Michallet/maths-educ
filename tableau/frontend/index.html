@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tableau</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Cabin+Sketch:wght@700&family=Gochi+Hand&display=swap">
+<style>
+  /* Gabarit repris de la démo « Pythagore en 20 s » : tableau vertical 9:16, prof en bas à droite. */
+  :root {
+    --ui: 'Baloo 2', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --fg: #1f2a33;
+    --muted: #5d6b77;
+    --panel: #eef1f3;
+    --line: #d5dbe0;
+    --accent: #c99a1e;
+  }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; padding: 0; background: transparent; font-family: var(--ui); color: var(--fg); }
+  .player { max-width: 400px; margin: 0 auto; display: grid; gap: 8px; padding: 2px 2px 6px; }
+  .stage { position: relative; width: 100%; aspect-ratio: 9 / 16; border-radius: 16px; overflow: hidden;
+           background: #23443a; box-shadow: 0 10px 28px rgba(0,0,0,.35); cursor: pointer; }
+  .stage svg { display: block; width: 100%; height: 100%; }
+  .overlay { position: absolute; inset: 0; margin: auto; width: 72px; height: 72px; border-radius: 50%; border: 0;
+             background: rgba(10,14,18,.55); color: #fff; display: grid; place-items: center; cursor: pointer; }
+  .overlay svg { width: 32px; height: 32px; }
+  .controls { display: flex; align-items: center; gap: 8px; background: var(--panel); border-radius: 12px; padding: 6px 8px; }
+  .ctl { flex: none; width: 34px; height: 34px; border-radius: 9px; border: 0; background: transparent; color: var(--fg);
+         display: grid; place-items: center; cursor: pointer; }
+  .ctl:hover { background: var(--line); }
+  .ctl svg { width: 18px; height: 18px; }
+  #scrub { flex: 1; min-width: 0; accent-color: var(--accent); }
+  .time { flex: none; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 70px; text-align: right; }
+  .actions { display: flex; gap: 8px; }
+  .big { flex: 1; border: 0; border-radius: 12px; padding: 10px 12px; font: 800 15px var(--ui); cursor: pointer; }
+  .big.q { background: #f6dd6b; color: #2b2410; }
+  .big.r { background: #23443a; color: #f3f1e7; }
+  button:focus-visible, #scrub:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .chalk { font-family: 'Gochi Hand', 'Comic Sans MS', cursive; }
+  .sketch { font-family: 'Cabin Sketch', 'Gochi Hand', cursive; font-weight: 700; }
+  .cap { font-family: var(--ui); font-weight: 800; }
+</style>
+</head>
+<body>
+<div class="player" id="player">
+  <div class="stage" id="stage">
+    <svg id="svg" viewBox="0 0 360 640" role="img" aria-label="Tableau du professeur">
+      <defs>
+        <filter id="chalk" filterUnits="userSpaceOnUse" x="0" y="0" width="360" height="640">
+          <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="3" result="n"/>
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="1.8" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+        <radialGradient id="smudge"><stop offset="0" stop-color="#ffffff" stop-opacity=".07"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+        <radialGradient id="vignette" cx=".5" cy=".45" r=".75"><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></radialGradient>
+        <clipPath id="clip-graphe"><rect x="22" y="112" width="316" height="290"/></clipPath>
+      </defs>
+
+      <!-- Tableau vide -->
+      <rect width="360" height="640" fill="#23443a"/>
+      <ellipse cx="90" cy="180" rx="120" ry="60" fill="url(#smudge)"/>
+      <ellipse cx="280" cy="420" rx="110" ry="70" fill="url(#smudge)"/>
+      <ellipse cx="160" cy="560" rx="140" ry="40" fill="url(#smudge)"/>
+      <rect width="360" height="640" fill="url(#vignette)"/>
+      <rect x="5" y="5" width="350" height="630" rx="10" fill="none" stroke="#9a6a3e" stroke-width="10"/>
+      <rect x="11" y="11" width="338" height="618" rx="6" fill="none" stroke="#5f3c20" stroke-width="2"/>
+
+      <!-- Calques de contenu : la leçon et la réponse à une question -->
+      <g id="layer-lecon" filter="url(#chalk)"></g>
+      <g id="layer-reponse" filter="url(#chalk)" style="display:none"></g>
+
+      <!-- Prof (identique à la démo Pythagore) -->
+      <g transform="translate(262 390)">
+        <path d="M10 128 Q50 112 90 128 L100 262 L0 262 Z" fill="#c65a3a"/>
+        <path d="M88 132 L98 208" stroke="#c65a3a" stroke-width="15" stroke-linecap="round"/>
+        <circle cx="98" cy="214" r="8" fill="#f0c29b"/>
+        <rect x="43" y="92" width="14" height="24" fill="#e2ad86"/>
+        <path d="M38 118 L50 138 L62 118 Z" fill="#f4f1e8"/>
+        <circle cx="22" cy="50" r="10" fill="#6b4a35"/><circle cx="17" cy="63" r="8" fill="#6b4a35"/>
+        <circle cx="78" cy="50" r="10" fill="#6b4a35"/><circle cx="83" cy="63" r="8" fill="#6b4a35"/>
+        <circle cx="22" cy="68" r="6" fill="#e9b48c"/><circle cx="78" cy="68" r="6" fill="#e9b48c"/>
+        <circle cx="50" cy="62" r="30" fill="#f0c29b"/>
+        <path d="M38 35 Q46 22 52 32 Q58 21 64 35" fill="none" stroke="#6b4a35" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="32" cy="75" r="4.5" fill="#ef8e7a" opacity=".5"/><circle cx="68" cy="75" r="4.5" fill="#ef8e7a" opacity=".5"/>
+        <g id="brow"><path d="M31 46 L46 44 M54 44 L69 46" stroke="#4a3426" stroke-width="3" stroke-linecap="round"/></g>
+        <g id="eyes"><circle cx="40" cy="61" r="2.8" fill="#1e2328"/><circle cx="60" cy="61" r="2.8" fill="#1e2328"/></g>
+        <circle cx="40" cy="60" r="10" fill="#ffffff" fill-opacity=".16" stroke="#263238" stroke-width="2.6"/>
+        <circle cx="60" cy="60" r="10" fill="#ffffff" fill-opacity=".16" stroke="#263238" stroke-width="2.6"/>
+        <ellipse cx="50" cy="70" rx="4" ry="5" fill="#e3a37c"/>
+        <ellipse id="mouth" cx="50" cy="86" rx="5" ry="3.2" fill="#7b2e2e"/>
+        <path d="M38 79 Q44 72 50 77 Q56 72 62 79 Q56 82 50 80 Q44 82 38 79 Z" fill="#6b4a35"/>
+        <g transform="translate(14 132)">
+          <g id="arm">
+            <path d="M0 0 L-20 -40 L-26 -76" fill="none" stroke="#c65a3a" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="-29" y="-104" width="6" height="18" rx="2" fill="#fbfbf3"/>
+            <circle cx="-26" cy="-84" r="8" fill="#f0c29b"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- Bandeau « question » et sous-titres -->
+      <g id="badge" style="display:none">
+        <rect x="20" y="20" width="132" height="26" rx="13" fill="#f6dd6b"/>
+        <text x="86" y="38" text-anchor="middle" class="cap" font-size="13" fill="#2b2410">✋ Ta question</text>
+      </g>
+      <g id="subs"></g>
+    </svg>
+    <button class="overlay" id="overlay" type="button" aria-label="Lire"></button>
+  </div>
+
+  <div class="controls">
+    <button class="ctl" id="btn-play" type="button" aria-label="Lire"></button>
+    <input type="range" id="scrub" min="0" max="1000" step="10" value="0" aria-label="Position">
+    <span class="time" id="time">0:00 / 0:00</span>
+    <button class="ctl" id="btn-replay" type="button" aria-label="Revenir au début">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+    </button>
+  </div>
+  <div class="actions">
+    <button class="big q" id="btn-question" type="button">✋ Poser une question</button>
+    <button class="big r" id="btn-reprendre" type="button" hidden>▶ Reprendre la leçon</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var SVGNS = 'http://www.w3.org/2000/svg';
+
+  // ---------- Constantes du tableau (coordonnées du viewBox 360 × 640) ----------
+  var GRAPHE = { x0: 36, x1: 328, y0: 126, y1: 390 };       // zone du repère
+  var FORMULES = { x: 24, lignes: [440, 480, 520], largeur: 222 };
+  var COULEURS = { blanc: '#f3f1e7', jaune: '#f6dd6b', bleu: '#7cc6ff', orange: '#ffb35c', rose: '#ff86b0', vert: '#9be59b' };
+  var DUREES = { repere: 1.2, courbe: 1.8, point: 0.5, segment: 0.7, tangente: 1.0, formule: 0.9, texte: 0.6, effacer: 0.5, pause: 1.0 };
+
+  function col(nom, defaut) { return COULEURS[nom] || (typeof nom === 'string' && /^#[0-9a-f]{3,8}$/i.test(nom) ? nom : COULEURS[defaut || 'blanc']); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function num(v, d) { var n = Number(v); return isFinite(n) ? n : d; }
+  function ease(p) { return p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; }
+  function mk(tag, attrs, parent) {
+    var e = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function fmtNum(v) {
+    var r = Math.round(v * 100) / 100;
+    return String(r).replace('.', ',').replace('-', '−');
+  }
+
+  // ---------- Évaluateur d'expressions (sans eval) ----------
+  var FONCS = { exp: Math.exp, ln: Math.log, log: Math.log10, sqrt: Math.sqrt, abs: Math.abs, sin: Math.sin, cos: Math.cos, tan: Math.tan };
+  var NOMS = ['sqrt', 'exp', 'abs', 'sin', 'cos', 'tan', 'log', 'ln', 'pi', 'x', 'e'];
+  function compiler(src) {
+    var s = String(src).replace(/\s+/g, '').replace(/,/g, '.').replace(/[×·]/g, '*').replace(/−/g, '-')
+      .replace(/²/g, '^2').replace(/³/g, '^3').replace(/π/g, 'pi').replace(/√/g, 'sqrt');
+    var toks = [], i = 0;
+    while (i < s.length) {
+      var c = s[i], m;
+      if ((m = /^\d+(\.\d+)?|^\.\d+/.exec(s.slice(i)))) { toks.push({ t: 'n', v: parseFloat(m[0]) }); i += m[0].length; continue; }
+      if (/[a-z]/i.test(c)) {
+        var trouve = null;
+        for (var k = 0; k < NOMS.length; k++) if (s.slice(i, i + NOMS[k].length).toLowerCase() === NOMS[k]) { trouve = NOMS[k]; break; }
+        if (!trouve) throw new Error('Symbole inconnu : ' + s.slice(i));
+        toks.push({ t: 'id', v: trouve }); i += trouve.length; continue;
+      }
+      if ('+-*/^()'.indexOf(c) >= 0) { toks.push({ t: c }); i++; continue; }
+      throw new Error('Caractère inattendu : ' + c);
+    }
+    var p = 0;
+    function peek() { return toks[p]; }
+    function eat(t) { if (toks[p] && toks[p].t === t) { p++; return true; } return false; }
+    function expr() {
+      var f = term();
+      for (;;) {
+        if (eat('+')) { var a = f, b = term(); f = function (x) { return a(x) + b(x); }; }
+        else if (eat('-')) { var a2 = f, b2 = term(); f = function (x) { return a2(x) - b2(x); }; }
+        else return f;
+      }
+    }
+    function term() {
+      var f = unary();
+      for (;;) {
+        var t = peek();
+        if (eat('*')) { var a = f, b = unary(); f = function (x) { return a(x) * b(x); }; }
+        else if (eat('/')) { var a2 = f, b2 = unary(); f = function (x) { return a2(x) / b2(x); }; }
+        else if (t && (t.t === 'n' || t.t === 'id' || t.t === '(')) { var a3 = f, b3 = unary(); f = function (x) { return a3(x) * b3(x); }; }
+        else return f;
+      }
+    }
+    function unary() {
+      if (eat('-')) { var f = unary(); return function (x) { return -f(x); }; }
+      if (eat('+')) return unary();
+      return power();
+    }
+    function power() {
+      var base = atom();
+      if (eat('^')) { var ex = unary(); return function (x) { return Math.pow(base(x), ex(x)); }; }
+      return base;
+    }
+    function atom() {
+      var t = toks[p++];
+      if (!t) throw new Error('Expression incomplète');
+      if (t.t === 'n') { var v = t.v; return function () { return v; }; }
+      if (t.t === '(') { var f = expr(); if (!eat(')')) throw new Error('Parenthèse manquante'); return f; }
+      if (t.t === 'id') {
+        if (t.v === 'x') return function (x) { return x; };
+        if (t.v === 'e') return function () { return Math.E; };
+        if (t.v === 'pi') return function () { return Math.PI; };
+        var fn = FONCS[t.v];
+        if (!eat('(')) throw new Error('Parenthèse attendue après ' + t.v);
+        var arg = expr();
+        if (!eat(')')) throw new Error('Parenthèse manquante');
+        return function (x) { return fn(arg(x)); };
+      }
+      throw new Error('Expression invalide');
+    }
+    var f = expr();
+    if (p < toks.length) throw new Error('Fin d\'expression inattendue');
+    return f;
+  }
+
+  // ---------- Texte enrichi : x^{2}, e^{x}, u_{n} ----------
+  function analyserTexte(s) {
+    s = String(s == null ? '' : s);
+    var out = [], buf = '', i = 0;
+    function flush() { if (buf) { out.push({ t: buf, m: 'n' }); buf = ''; } }
+    while (i < s.length) {
+      var c = s[i];
+      if ((c === '^' || c === '_') && i + 1 < s.length) {
+        flush();
+        var j = i + 1, contenu = '';
+        if (s[j] === '{') {
+          var prof = 1; j++;
+          while (j < s.length) { if (s[j] === '{') prof++; else if (s[j] === '}') { prof--; if (prof === 0) break; } contenu += s[j]; j++; }
+          i = j + 1;
+        } else if (/[0-9]/.test(s[j])) { while (j < s.length && /[0-9]/.test(s[j])) { contenu += s[j]; j++; } i = j; }
+        else if (s[j] === '-' && j + 1 < s.length) { contenu = s[j] + s[j + 1]; i = j + 2; }
+        else { contenu = s[j]; i = j + 1; }
+        out.push({ t: contenu.replace(/[{}]/g, ''), m: c === '^' ? 'sup' : 'sub' });
+      } else { buf += c; i++; }
+    }
+    flush();
+    return out;
+  }
+  function texteBrut(s) { return analyserTexte(s).map(function (x) { return x.t; }).join(''); }
+
+  function texteRiche(parent, s, o) {
+    var taille = o.taille || 20;
+    var t = mk('text', { x: o.x, y: o.y, 'font-size': taille, fill: o.fill || COULEURS.blanc, 'text-anchor': o.ancre || 'start', 'class': o.classe || 'chalk' }, parent);
+    var decal = 0;
+    analyserTexte(s).forEach(function (seg) {
+      var ts = mk('tspan', {}, t);
+      var cible = seg.m === 'sup' ? -taille * 0.42 : seg.m === 'sub' ? taille * 0.25 : 0;
+      if (cible !== decal) { ts.setAttribute('dy', cible - decal); decal = cible; }
+      if (seg.m !== 'n') ts.setAttribute('font-size', taille * 0.66);
+      ts.textContent = seg.t;
+    });
+    if (o.largeurMax) {
+      var l = 0;
+      try { l = t.getBBox().width; } catch (e) { l = 0; }
+      if (l > o.largeurMax && !o._reduit) {
+        parent.removeChild(t);
+        var o2 = Object.assign({}, o, { taille: Math.max(10, taille * o.largeurMax / l), _reduit: true });
+        return texteRiche(parent, s, o2);
+      }
+    }
+    return t;
+  }
+
+  // ---------- Tracés progressifs ----------
+  function revelateur(g, chemins, attrs) {
+    var lignes = [], total = 0;
+    chemins.forEach(function (pts) {
+      if (!pts || pts.length < 2) return;
+      var pl = mk('polyline', Object.assign({ fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', points: '' }, attrs), g);
+      var cum = [0], L = 0;
+      for (var i = 1; i < pts.length; i++) { L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); cum.push(L); }
+      lignes.push({ pl: pl, pts: pts, cum: cum, L: L });
+      total += L;
+    });
+    var dernier = -1;
+    return function (p) {
+      if (p === dernier) return;
+      dernier = p;
+      var reste = p * total;
+      lignes.forEach(function (ln) {
+        if (reste <= 0) { ln.pl.setAttribute('points', ''); return; }
+        if (reste >= ln.L) { ln.pl.setAttribute('points', ln.pts.map(String).join(' ')); reste -= ln.L; return; }
+        var k = 1;
+        while (k < ln.cum.length && ln.cum[k] < reste) k++;
+        var a = ln.pts[k - 1], b = ln.pts[k], seg = (ln.cum[k] - ln.cum[k - 1]) || 1, f = (reste - ln.cum[k - 1]) / seg;
+        var pts = ln.pts.slice(0, k).concat([[a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]]);
+        ln.pl.setAttribute('points', pts.map(String).join(' '));
+        reste = 0;
+      });
+    };
+  }
+  function popEchelle(p) { return p < .6 ? .3 + .85 * (p / .6) : 1.15 - .15 * ((p - .6) / .4); }
+  function appliquerPop(g, cx, cy, p) {
+    var s = popEchelle(p);
+    g.setAttribute('transform', 'translate(' + cx + ' ' + cy + ') scale(' + s + ') translate(' + (-cx) + ' ' + (-cy) + ')');
+    return Math.min(1, p / .35);
+  }
+
+  // ---------- Construction d'une scène en ligne de temps ----------
+  function construire(scene, calque, mode) {
+    while (calque.firstChild) calque.removeChild(calque.firstChild);
+    var zones = {
+      titre: mk('g', {}, calque),
+      graphe: mk('g', { 'clip-path': 'url(#clip-graphe)' }, calque),
+      formules: mk('g', {}, calque)
+    };
+    var els = [], etapes = [];
+    var rep = { xmin: -5, xmax: 5, ymin: -5, ymax: 5 };
+    function X(x) { return GRAPHE.x0 + (x - rep.xmin) / (rep.xmax - rep.xmin) * (GRAPHE.x1 - GRAPHE.x0); }
+    function Y(y) { return GRAPHE.y1 - (y - rep.ymin) / (rep.ymax - rep.ymin) * (GRAPHE.y1 - GRAPHE.y0); }
+    var lignesFormules = {};
+
+    function ajouter(zone, ts, dur, construireFn, dessin) {
+      var g = mk('g', { opacity: 0 }, zones[zone]);
+      var rec = { g: g, ts: ts, dur: Math.max(.05, dur), te: Infinity, zone: zone, dessin: !!dessin, upd: null };
+      rec.upd = construireFn(g) || function () { return 1; };
+      els.push(rec);
+      return rec;
+    }
+
+    function etiquette(g, x, y, texte, couleur, pos, taille) {
+      pos = pos || 'hd';
+      var dx = pos.indexOf('g') >= 0 ? -7 : 7, dy = pos.indexOf('b') >= 0 ? 18 : -8;
+      return texteRiche(g, texte, { x: x + dx, y: y + dy, taille: taille || 17, fill: couleur, ancre: dx < 0 ? 'end' : 'start' });
+    }
+
+    var t = 0.2;
+    // Titre et niveau
+    if (scene.niveau) {
+      ajouter('titre', t, .5, function (g) {
+        texteRiche(g, scene.niveau, { x: 336, y: 36, taille: 14, ancre: 'end', fill: COULEURS.blanc });
+        return function (p) { return .7 * Math.min(1, p / .5); };
+      });
+    }
+    if (scene.titre) {
+      var yTitre = mode === 'reponse' ? 80 : 92, tailleTitre = mode === 'reponse' ? 28 : 36;
+      ajouter('titre', t + .3, .7, function (g) {
+        var tx = texteRiche(g, scene.titre, { x: 24, y: yTitre, taille: tailleTitre, fill: COULEURS.jaune, classe: 'sketch', largeurMax: 312 });
+        return function (p) { return appliquerPop(g, 24, yTitre - 12, p); };
+      });
+      t += 1.1;
+    }
+
+    (scene.etapes || []).forEach(function (etape, iEtape) {
+      var debut = t + .15, cur = debut + .25, prevDebut = cur;
+      (etape.actions || []).forEach(function (a) {
+        try {
+          var type = a.type;
+          var dur = num(a.duree, DUREES[type] || .6);
+          var ts = a.en_meme_temps ? prevDebut : cur;
+          prevDebut = ts;
+          var fin = ts + dur;
+          if (type === 'repere') {
+            rep = { xmin: num(a.xmin, -5), xmax: num(a.xmax, 5), ymin: num(a.ymin, -5), ymax: num(a.ymax, 5) };
+            if (!(rep.xmax > rep.xmin)) rep.xmax = rep.xmin + 1;
+            if (!(rep.ymax > rep.ymin)) rep.ymax = rep.ymin + 1;
+            var r = Object.assign({}, rep), px = Math.abs(num(a.pas_x, 1)) || 1, py = Math.abs(num(a.pas_y, 1)) || 1;
+            ajouter('graphe', ts, dur, function (g) {
+              var y0 = Y(clamp(0, r.ymin, r.ymax)), x0 = X(clamp(0, r.xmin, r.xmax));
+              var grille = mk('g', { opacity: 0 }, g), reperes = mk('g', { opacity: 0 }, g);
+              var kx0 = Math.ceil(r.xmin / px), kx1 = Math.floor(r.xmax / px), ky0 = Math.ceil(r.ymin / py), ky1 = Math.floor(r.ymax / py);
+              if ((kx1 - kx0) > 40) { px *= Math.ceil((kx1 - kx0) / 20); kx0 = Math.ceil(r.xmin / px); kx1 = Math.floor(r.xmax / px); }
+              if ((ky1 - ky0) > 40) { py *= Math.ceil((ky1 - ky0) / 20); ky0 = Math.ceil(r.ymin / py); ky1 = Math.floor(r.ymax / py); }
+              for (var k = kx0; k <= kx1; k++) {
+                var xv = k * px, xs = X(xv);
+                if (a.grille) mk('line', { x1: xs, y1: GRAPHE.y0, x2: xs, y2: GRAPHE.y1, stroke: '#f3f1e7', 'stroke-opacity': .12, 'stroke-width': 1 }, grille);
+                if (Math.abs(xv) < 1e-9) continue;
+                mk('line', { x1: xs, y1: y0 - 3, x2: xs, y2: y0 + 3, stroke: '#f3f1e7', 'stroke-width': 1.5 }, reperes);
+                texteRiche(reperes, fmtNum(xv), { x: xs, y: y0 + 15, taille: 11, ancre: 'middle' });
+              }
+              for (var k2 = ky0; k2 <= ky1; k2++) {
+                var yv = k2 * py, ys = Y(yv);
+                if (a.grille) mk('line', { x1: GRAPHE.x0, y1: ys, x2: GRAPHE.x1, y2: ys, stroke: '#f3f1e7', 'stroke-opacity': .12, 'stroke-width': 1 }, grille);
+                if (Math.abs(yv) < 1e-9) continue;
+                mk('line', { x1: x0 - 3, y1: ys, x2: x0 + 3, y2: ys, stroke: '#f3f1e7', 'stroke-width': 1.5 }, reperes);
+                texteRiche(reperes, fmtNum(yv), { x: x0 - 6, y: ys + 4, taille: 11, ancre: 'end' });
+              }
+              texteRiche(reperes, 'x', { x: GRAPHE.x1 - 2, y: y0 - 7, taille: 13, ancre: 'end' });
+              texteRiche(reperes, 'y', { x: x0 + 7, y: GRAPHE.y0 + 8, taille: 13 });
+              if (r.xmin <= 0 && r.xmax >= 0 && r.ymin <= 0 && r.ymax >= 0) texteRiche(reperes, 'O', { x: x0 - 6, y: y0 + 15, taille: 12, ancre: 'end' });
+              var fl = mk('g', { opacity: 0 }, g);
+              mk('path', { d: 'M' + (GRAPHE.x1 - 7) + ' ' + (y0 - 4) + ' L' + GRAPHE.x1 + ' ' + y0 + ' L' + (GRAPHE.x1 - 7) + ' ' + (y0 + 4), fill: 'none', stroke: '#f3f1e7', 'stroke-width': 2 }, fl);
+              mk('path', { d: 'M' + (x0 - 4) + ' ' + (GRAPHE.y0 + 7) + ' L' + x0 + ' ' + GRAPHE.y0 + ' L' + (x0 + 4) + ' ' + (GRAPHE.y0 + 7), fill: 'none', stroke: '#f3f1e7', 'stroke-width': 2 }, fl);
+              var trace = revelateur(g, [[[GRAPHE.x0 - 4, y0], [GRAPHE.x1, y0]], [[x0, GRAPHE.y1 + 4], [x0, GRAPHE.y0]]], { stroke: '#f3f1e7', 'stroke-width': 2 });
+              return function (p) {
+                trace(ease(Math.min(1, p / .7)));
+                var q = clamp((p - .55) / .45, 0, 1);
+                grille.setAttribute('opacity', q); reperes.setAttribute('opacity', q); fl.setAttribute('opacity', p > .68 ? 1 : 0);
+                return 1;
+              };
+            }, true);
+          } else if (type === 'courbe') {
+            var f = compiler(a.expr), r2 = Object.assign({}, rep);
+            var xa = num(a.xmin, r2.xmin), xb = num(a.xmax, r2.xmax), marge = (r2.ymax - r2.ymin) * .25;
+            ajouter('graphe', ts, dur, function (g) {
+              var chemins = [], cour = [], N = 260;
+              for (var i = 0; i <= N; i++) {
+                var x = xa + (xb - xa) * i / N, y;
+                try { y = f(x); } catch (e) { y = NaN; }
+                if (!isFinite(y) || y < r2.ymin - marge || y > r2.ymax + marge) { if (cour.length > 1) chemins.push(cour); cour = []; continue; }
+                cour.push([+X(x).toFixed(2), +Y(y).toFixed(2)]);
+              }
+              if (cour.length > 1) chemins.push(cour);
+              var c = col(a.couleur, 'bleu');
+              var trace = revelateur(g, chemins, { stroke: c, 'stroke-width': 3, 'stroke-dasharray': a.pointille ? '6 6' : 'none' });
+              var lab = null;
+              if (a.label) {
+                var xl = num(a.label_x, NaN);
+                if (!isFinite(xl)) {
+                  var vis = []; chemins.forEach(function (ch) { ch.forEach(function (pt) { if (pt[1] >= GRAPHE.y0 && pt[1] <= GRAPHE.y1) vis.push(pt); }); });
+                  var pt = vis.length ? vis[Math.floor(vis.length * .78)] : null;
+                  if (pt) lab = etiquette(g, pt[0], pt[1], a.label, c, pt[0] > 250 ? 'hg' : (a.position_label || 'hg'));
+                } else {
+                  var yl = f(xl);
+                  if (isFinite(yl)) lab = etiquette(g, X(xl), Y(yl), a.label, c, a.position_label || 'hg');
+                }
+                if (lab) lab.setAttribute('opacity', 0);
+              }
+              return function (p) { trace(ease(p)); if (lab) lab.setAttribute('opacity', clamp((p - .75) / .25, 0, 1)); return 1; };
+            }, true);
+          } else if (type === 'point') {
+            var px1 = X(num(a.x, 0)), py1 = Y(num(a.y, 0));
+            ajouter('graphe', ts, dur, function (g) {
+              var c = col(a.couleur, 'jaune');
+              mk('circle', { cx: px1, cy: py1, r: 4.5, fill: c }, g);
+              if (a.label) etiquette(g, px1, py1, a.label, c, a.position_label);
+              return function (p) { return appliquerPop(g, px1, py1, p); };
+            });
+          } else if (type === 'segment' || type === 'tangente') {
+            var pts, c2 = col(a.couleur, type === 'tangente' ? 'jaune' : 'blanc'), labPos;
+            if (type === 'tangente') {
+              var ft = compiler(a.expr), xt = num(a.x0, 0), h = 1e-4, yt = ft(xt), m = (ft(xt + h) - ft(xt - h)) / (2 * h);
+              var L = num(a.longueur, (rep.xmax - rep.xmin) / 3);
+              pts = [[xt - L / 2, yt - m * L / 2], [xt + L / 2, yt + m * L / 2]];
+              labPos = 'hg';
+            } else {
+              var de = Array.isArray(a.de) ? a.de : [0, 0], vers = Array.isArray(a.a) ? a.a : [1, 1];
+              pts = [[num(de[0], 0), num(de[1], 0)], [num(vers[0], 1), num(vers[1], 1)]];
+              labPos = 'hd';
+            }
+            var sp = pts.map(function (q) { return [X(q[0]), Y(q[1])]; });
+            ajouter('graphe', ts, dur, function (g) {
+              var trace = revelateur(g, [sp], { stroke: c2, 'stroke-width': type === 'tangente' ? 2.5 : 2, 'stroke-dasharray': a.pointille ? '5 5' : 'none' });
+              var tete = null, lab = null;
+              if (a.fleche) {
+                var ang = Math.atan2(sp[1][1] - sp[0][1], sp[1][0] - sp[0][0]), x2 = sp[1][0], y2 = sp[1][1];
+                var d = 'M' + (x2 - 9 * Math.cos(ang - .45)) + ' ' + (y2 - 9 * Math.sin(ang - .45)) + ' L' + x2 + ' ' + y2 + ' L' + (x2 - 9 * Math.cos(ang + .45)) + ' ' + (y2 - 9 * Math.sin(ang + .45));
+                tete = mk('path', { d: d, fill: 'none', stroke: c2, 'stroke-width': 2, opacity: 0 }, g);
+              }
+              if (a.label) { lab = etiquette(g, sp[1][0], sp[1][1], a.label, c2, a.position_label || labPos); lab.setAttribute('opacity', 0); }
+              return function (p) {
+                trace(ease(p));
+                if (tete) tete.setAttribute('opacity', p > .97 ? 1 : 0);
+                if (lab) lab.setAttribute('opacity', clamp((p - .7) / .3, 0, 1));
+                return 1;
+              };
+            }, true);
+          } else if (type === 'texte') {
+            var tx1 = X(num(a.x, 0)), ty1 = Y(num(a.y, 0));
+            ajouter('graphe', ts, dur, function (g) {
+              texteRiche(g, a.texte, { x: tx1, y: ty1, taille: a.taille === 'petit' ? 14 : 18, fill: col(a.couleur, 'blanc'), ancre: a.ancre === 'milieu' ? 'middle' : 'start' });
+              return function (p) { return appliquerPop(g, tx1, ty1 - 6, p); };
+            });
+          } else if (type === 'formule') {
+            var ligne = clamp(Math.round(num(a.ligne, 1)), 1, 3), yF = FORMULES.lignes[ligne - 1];
+            if (lignesFormules[ligne]) lignesFormules[ligne].te = Math.min(lignesFormules[ligne].te, ts);
+            lignesFormules[ligne] = ajouter('formules', ts, dur, function (g) {
+              var c = col(a.couleur, 'blanc');
+              var txt = texteRiche(g, a.texte, { x: FORMULES.x, y: yF, taille: 27, fill: c, largeurMax: FORMULES.largeur });
+              var boite = null;
+              if (a.encadre) {
+                var bb = { x: FORMULES.x, y: yF - 26, width: 120, height: 34 };
+                try { bb = txt.getBBox(); } catch (e) { }
+                var x0 = bb.x - 7, y0 = bb.y - 4, x1 = bb.x + bb.width + 7, y1 = bb.y + bb.height + 4;
+                boite = revelateur(g, [[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]], { stroke: COULEURS.jaune, 'stroke-width': 2.2 });
+              }
+              var gt = mk('g', {}, g); gt.appendChild(txt);
+              return function (p) {
+                var o = appliquerPop(gt, FORMULES.x + 40, yF - 10, Math.min(1, p / .6));
+                if (boite) boite(ease(clamp((p - .55) / .45, 0, 1)));
+                return o > 0 ? 1 : 0;
+              };
+            }, !!a.encadre);
+          } else if (type === 'effacer') {
+            var cible = a.cible || 'tout';
+            els.forEach(function (e) {
+              if (e.ts >= ts) return;
+              if (cible === 'tout' ? e.zone !== 'titre' : e.zone === cible) e.te = Math.min(e.te, ts);
+            });
+            if (cible === 'tout' || cible === 'formules') lignesFormules = {};
+          }
+          // « pause » : seulement du temps
+          cur = Math.max(cur, fin + .12);
+        } catch (err) {
+          console.warn('Action ignorée', a, err);
+        }
+      });
+      var mots = texteBrut(etape.sous_titre || '').split(/\s+/).filter(Boolean).length;
+      var lecture = etape.sous_titre ? Math.max(2.2, .8 + .36 * mots) : 0;
+      var fin = Math.max(cur + .5, debut + lecture, debut + num(etape.duree_min, 0));
+      etapes.push({ debut: debut, fin: fin, sous_titre: etape.sous_titre || '' });
+      t = fin;
+    });
+
+    var duree = Math.max(t + .8, 2);
+    return {
+      duree: duree, etapes: etapes,
+      rendre: function (temps) {
+        var ecrit = false;
+        for (var i = 0; i < els.length; i++) {
+          var e = els[i];
+          if (temps < e.ts) { if (e._o !== 0) { e.g.setAttribute('opacity', 0); e._o = 0; } continue; }
+          var p = Math.min(1, (temps - e.ts) / e.dur);
+          if (e.dessin && p < 1) ecrit = true;
+          var o = e.upd(p);
+          if (temps >= e.te) o *= 1 - clamp((temps - e.te) / .45, 0, 1);
+          if (o !== e._o) { e.g.setAttribute('opacity', o); e._o = o; }
+        }
+        return ecrit;
+      },
+      etapeA: function (temps) {
+        var idx = -1;
+        for (var i = 0; i < etapes.length; i++) if (temps >= etapes[i].debut) idx = i;
+        return idx;
+      }
+    };
+  }
+
+  // ---------- Sous-titres ----------
+  var subs = document.getElementById('subs'), subsCle = null;
+  function decouper(s, max) {
+    var mots = String(s).split(/\s+/).filter(Boolean), lignes = [], cour = '';
+    // Ponctuation double (« : », « ! », « ? », « ; ») collée au mot précédent.
+    mots = mots.reduce(function (acc, m) { if (/^[:;!?»]+$/.test(m) && acc.length) acc[acc.length - 1] += '\u00a0' + m; else acc.push(m); return acc; }, []);
+    mots.forEach(function (m) {
+      var essai = cour ? cour + ' ' + m : m;
+      if (texteBrut(essai).length > max && cour) { lignes.push(cour); cour = m; } else cour = essai;
+    });
+    if (cour) lignes.push(cour);
+    return lignes.slice(0, 3);
+  }
+  function afficherSousTitre(texte, opacite) {
+    var cle = texte || '';
+    if (cle !== subsCle) {
+      subsCle = cle;
+      while (subs.firstChild) subs.removeChild(subs.firstChild);
+      if (cle) {
+        var lignes = decouper(cle, 30), h = 14 + lignes.length * 22, y0 = 624 - h;
+        mk('rect', { x: 20, y: y0, width: 320, height: h, rx: 12, fill: '#0c1013', 'fill-opacity': .62 }, subs);
+        lignes.forEach(function (l, i) { texteRiche(subs, l, { x: 180, y: y0 + 25 + i * 22, taille: 16, fill: '#ffffff', ancre: 'middle', classe: 'cap' }); });
+      }
+    }
+    subs.setAttribute('opacity', opacite);
+  }
+
+  // ---------- État du lecteur ----------
+  var svg = document.getElementById('svg');
+  var calqueLecon = document.getElementById('layer-lecon'), calqueReponse = document.getElementById('layer-reponse');
+  var badge = document.getElementById('badge');
+  var arm = document.getElementById('arm'), mouth = document.getElementById('mouth'), brow = document.getElementById('brow'), eyes = document.getElementById('eyes');
+  var stage = document.getElementById('stage'), overlay = document.getElementById('overlay');
+  var btnPlay = document.getElementById('btn-play'), btnReplay = document.getElementById('btn-replay');
+  var btnQuestion = document.getElementById('btn-question'), btnReprendre = document.getElementById('btn-reprendre');
+  var scrub = document.getElementById('scrub'), timeEl = document.getElementById('time');
+
+  var ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>';
+  var ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';
+  var ICON_REPLAY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>';
+
+  var etat = { mode: 'lecon', lecon: null, reponse: null, t: 0, tLecon: 0, joue: false, leconId: null, reponseId: null, compteur: 0 };
+  function tl() { return etat.mode === 'lecon' ? etat.lecon : etat.reponse; }
+
+  function fmt(s) { s = Math.floor(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+  function majUI() {
+    var T = tl(), fini = T && etat.t >= T.duree;
+    btnPlay.innerHTML = etat.joue ? ICON_PAUSE : ICON_PLAY;
+    btnPlay.setAttribute('aria-label', etat.joue ? 'Pause' : 'Lire');
+    overlay.hidden = etat.joue || !T;
+    overlay.innerHTML = fini ? ICON_REPLAY : ICON_PLAY;
+    btnReprendre.hidden = etat.mode !== 'reponse';
+    btnQuestion.hidden = etat.mode !== 'lecon';
+    badge.style.display = etat.mode === 'reponse' ? '' : 'none';
+    calqueLecon.style.display = etat.mode === 'lecon' ? '' : 'none';
+    calqueReponse.style.display = etat.mode === 'reponse' ? '' : 'none';
+  }
+  function rendre() {
+    var T = tl();
+    if (!T) return;
+    var ecrit = T.rendre(etat.t);
+    scrub.max = Math.round(T.duree * 1000);
+    scrub.value = Math.round(etat.t * 1000);
+    timeEl.textContent = fmt(etat.t) + ' / ' + fmt(T.duree);
+    var i = T.etapeA(etat.t), st = i >= 0 ? T.etapes[i] : null, op = 0;
+    if (st && st.sous_titre) {
+      var dans = etat.t - st.debut, reste = (i === T.etapes.length - 1 ? T.duree : st.fin) - etat.t;
+      op = clamp(Math.min(dans / .25, reste / .2), 0, 1);
+    }
+    afficherSousTitre(st ? st.sous_titre : '', op);
+    var maintenant = performance.now();
+    // Bras : écrit au tableau pendant les tracés
+    var ang = ecrit && etat.joue ? -8 + 6 * Math.sin(maintenant * .02) : 0;
+    arm.setAttribute('transform', 'rotate(' + ang.toFixed(2) + ')');
+    // Bouche : parle quand un sous-titre est affiché
+    var parle = etat.joue && op > .5;
+    var sy = parle ? .35 + .85 * Math.abs(Math.sin(maintenant * .024)) : .35;
+    mouth.setAttribute('transform', 'translate(50 86) scale(1 ' + sy.toFixed(2) + ') translate(-50 -86)');
+    // Sourcils : se lèvent au début de chaque étape
+    brow.setAttribute('transform', st && etat.t - st.debut < .6 && etat.t >= st.debut ? 'translate(0 -3)' : '');
+  }
+  function clignement(now) {
+    var ph = (now % 3400) / 3400, s = ph > .95 && ph < .99 ? .1 : 1;
+    eyes.setAttribute('transform', 'translate(50 61) scale(1 ' + s + ') translate(-50 -61)');
+  }
+
+  var dernier = performance.now();
+  function boucle(now) {
+    var dt = (now - dernier) / 1000; dernier = now;
+    var T = tl();
+    if (etat.joue && T) {
+      etat.t += Math.min(dt, .1);
+      if (etat.t >= T.duree) { etat.t = T.duree; etat.joue = false; majUI(); }
+    }
+    rendre();
+    clignement(now);
+    requestAnimationFrame(boucle);
+  }
+
+  function jouer() { var T = tl(); if (!T) return; if (etat.t >= T.duree) etat.t = 0; etat.joue = true; majUI(); }
+  function pause(signaler) {
+    var etaitEnLecture = etat.joue;
+    etat.joue = false; majUI();
+    if (signaler && etat.mode === 'lecon' && etaitEnLecture) envoyerPosition('pause');
+  }
+  function basculer() { etat.joue ? pause(true) : jouer(); }
+
+  function envoyerPosition(evenement) {
+    var T = etat.lecon; if (!T) return;
+    var t = etat.mode === 'lecon' ? etat.t : etat.tLecon;
+    var i = T.etapeA(t);
+    etat.compteur++;
+    setValeur({ evenement: evenement, t: Math.round(t * 10) / 10, etape: i, nb_etapes: T.etapes.length, n: etat.compteur });
+  }
+
+  stage.addEventListener('click', function (e) { if (e.target.closest('#overlay')) return; basculer(); });
+  overlay.addEventListener('click', function (e) { e.stopPropagation(); jouer(); });
+  btnPlay.addEventListener('click', basculer);
+  btnReplay.addEventListener('click', function () { etat.t = 0; rendre(); jouer(); });
+  scrub.addEventListener('input', function () { etat.t = Number(scrub.value) / 1000; rendre(); majUI(); });
+  btnQuestion.addEventListener('click', function () { etat.joue = false; majUI(); envoyerPosition('question'); });
+  btnReprendre.addEventListener('click', function () {
+    etat.mode = 'lecon'; etat.t = etat.tLecon; majUI(); rendre(); jouer();
+    etat.compteur++; setValeur({ evenement: 'reprise', n: etat.compteur });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); basculer(); }
+  });
+
+  // ---------- Protocole des composants Streamlit ----------
+  function envoyer(type, data) { window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data || {}), '*'); }
+  function setValeur(v) { envoyer('streamlit:setComponentValue', { value: v, dataType: 'json' }); }
+  function hauteur() { envoyer('streamlit:setFrameHeight', { height: Math.ceil(document.getElementById('player').getBoundingClientRect().height) + 8 }); }
+  new ResizeObserver(hauteur).observe(document.body);
+
+  var policesPretes = Promise.race([
+    Promise.all(['36px "Cabin Sketch"', '20px "Gochi Hand"', '800 16px "Baloo 2"'].map(function (f) { return document.fonts.load(f).catch(function () { }); })),
+    new Promise(function (r) { setTimeout(r, 2000); })
+  ]);
+
+  function appliquerTheme(theme) {
+    if (!theme) return;
+    var r = document.documentElement.style;
+    if (theme.textColor) r.setProperty('--fg', theme.textColor);
+    if (theme.secondaryBackgroundColor) r.setProperty('--panel', theme.secondaryBackgroundColor);
+    if (theme.base === 'dark') { r.setProperty('--line', 'rgba(255,255,255,.12)'); r.setProperty('--muted', 'rgba(255,255,255,.6)'); }
+  }
+
+  var file = Promise.resolve();
+  function surRendu(args, theme) {
+    appliquerTheme(theme);
+    file = file.then(function () { return policesPretes; }).then(function () {
+      if (args.lecon && args.lecon_id !== etat.leconId) {
+        etat.leconId = args.lecon_id;
+        var visible = calqueLecon.style.display; calqueLecon.style.display = '';
+        etat.lecon = construire(args.lecon, calqueLecon, 'lecon');
+        calqueLecon.style.display = visible;
+        etat.mode = 'lecon'; etat.t = 0; etat.tLecon = 0; etat.joue = false;
+      }
+      if (args.reponse && args.reponse_id && args.reponse_id !== etat.reponseId) {
+        etat.reponseId = args.reponse_id;
+        if (args.nouvelle_reponse) {
+          if (etat.mode === 'lecon') etat.tLecon = etat.t;
+          calqueReponse.style.display = '';
+          etat.reponse = construire(args.reponse, calqueReponse, 'reponse');
+          etat.mode = 'reponse'; etat.t = 0; etat.joue = true;
+        }
+      }
+      majUI(); rendre(); hauteur();
+    }).catch(function (e) { console.error(e); });
+  }
+
+  window.addEventListener('message', function (ev) {
+    var d = ev.data;
+    if (d && d.type === 'streamlit:render') surRendu(d.args || {}, d.theme);
+  });
+  envoyer('streamlit:componentReady', { apiVersion: 1 });
+  majUI(); hauteur();
+  requestAnimationFrame(boucle);
+})();
+</script>
+</body>
+</html>
