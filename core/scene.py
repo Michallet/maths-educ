@@ -60,6 +60,7 @@ SCENE_SCHEMA: dict[str, Any] = {
                 "type": "object",
                 "properties": {
                     "sous_titre": {"type": "string"},
+                    "voix": {"type": "string"},
                     "duree_min": {"type": "number"},
                     "actions": {"type": "array", "items": ACTION_SCHEMA},
                 },
@@ -142,6 +143,8 @@ def normaliser_scene(brut: Any, max_etapes: int = 14, max_actions: int = 8) -> t
             continue
         actions = [a for a in (normaliser_action(x, alertes) for x in (e.get("actions") or [])[:max_actions]) if a]
         etape: dict[str, Any] = {"sous_titre": str(e.get("sous_titre", ""))[:140], "actions": actions}
+        if str(e.get("voix", "")).strip():
+            etape["voix"] = str(e["voix"]).strip()[:400]
         d = _nombre(e.get("duree_min"))
         if d is not None:
             etape["duree_min"] = max(0.0, min(d, 15.0))

@@ -29,6 +29,12 @@ Sans clé, l'app tourne en **mode démo** : réponses préparées, voix muette, 
 
 Pour une nouvelle leçon : copie `_modele.md` sous un nouveau nom dans `lecons/`, remplis-le, choisis-le dans la barre latérale, clique sur **Générer la scène avec Gemini**, vérifie le rendu (le JSON est modifiable dans la barre latérale), puis télécharge le JSON et commite-le à côté de la fiche. Sur Community Cloud le disque n'est pas persistant : sans ce commit, la scène est perdue au redémarrage.
 
+### Voix off de la leçon
+
+Chaque étape de la scène a un champ `voix` : la phrase que dit le prof, en toutes lettres (« e puissance x »). Au chargement de la leçon, ces phrases sont synthétisées en parallèle, une par étape, puis gardées en cache par le serveur, ce qui fait un seul passage par scène, voix et modèle. Le tableau lance chaque extrait au début de son étape. Si la phrase est plus longue que les tracés, l'étape s'allonge pour l'attendre. Sans champ `voix`, le sous-titre est lu, converti en toutes lettres. Le bouton 🔊 du lecteur coupe ou remet le son ; l'interrupteur « Voix off de la leçon » de la barre latérale la désactive.
+
+L'audio n'est envoyé au tableau qu'une fois : le tableau confirme sa réception et Python cesse ensuite de le renvoyer.
+
 ### 2. La question de l'élève
 
 1. **✋ Poser une question** met la leçon en pause et transmet la position (étape en cours) à Python.
@@ -49,6 +55,7 @@ Les latences de chaque étape s'affichent sous la réponse.
 | `app.py` | interface Streamlit |
 | `core/chaine.py` | orchestration question → texte + tableau en parallèle → voix |
 | `core/moteur.py` | appels Gemini (STT, texte en streaming, JSON, TTS) et moteur de démo |
+| `core/voix_lecon.py` | voix off de la leçon : texte parlé par étape, synthèse en parallèle |
 | `core/scene.py` | schéma JSON des scènes, nettoyage, résumé de la leçon pour le contexte |
 | `core/prompts.py` | chargement des prompts et des fiches |
 | `tableau/frontend/index.html` | moteur de rendu du tableau (SVG, prof animé, timeline) |

@@ -17,6 +17,7 @@ from core.moteur import MoteurDemo, Reglages, creer_moteur
 from core.prompts import (lire_lecon, lire_scene, lister_lecons, message_question, systeme_lecon_vers_scene,
                           systeme_reponse_orale, systeme_reponse_tableau)
 from core.scene import empreinte, normaliser_scene, resume_jusqua
+from core.voix_lecon import generer_voix_lecon
 from tableau import tableau
 
 st.set_page_config(page_title="Prof de maths IA", page_icon="📐", layout="wide")
@@ -36,6 +37,12 @@ def cle_secrets() -> str:
         return st.secrets.get("GEMINI_API_KEY", "")
     except Exception:  # pas de fichier secrets
         return ""
+
+
+@st.cache_data(show_spinner="Le prof enregistre la voix off de la leçon…", max_entries=16)
+def voix_lecon(_moteur, scene_json: str, cle_moteur: str) -> tuple[list[bytes | None], list[str]]:
+    """Synthétisée une fois par scène, voix et modèle, puis gardée en cache par le serveur."""
+    return generer_voix_lecon(_moteur, json.loads(scene_json))
 
 
 def charger_lecon(nom: str) -> None:
@@ -115,6 +122,19 @@ with st.sidebar:
         st.download_button("⬇️ Télécharger la scène", json.dumps(ss.scene_lecon, ensure_ascii=False, indent=2),
                            file_name=f"{ss.lecon_nom}.scene.json", mime="application/json", width="stretch")
 
+    voix_off = st.toggle("🔊 Voix off de la leçon", value=True, key="voix_off")
+    voix_wavs, voix_id = None, None
+    if ss.scene_lecon and voix_off:
+        scene_json = json.dumps(ss.scene_lecon, ensure_ascii=False, sort_keys=True)
+        cle_moteur = f"{moteur.nom}|{reglages.modele_tts}|{reglages.voix}"
+        voix_wavs, erreurs_voix = voix_lecon(moteur, scene_json, cle_moteur)
+        if erreurs_voix:
+            st.warning(f"Voix off : {len(erreurs_voix)} étape(s) sans son. " + erreurs_voix[0])
+        if any(voix_wavs):
+            voix_id = empreinte([scene_json, cle_moteur])
+        else:
+            voix_wavs = None
+
 # ---------------------------------------------------------------- page principale
 st.title("📐 Prof de maths IA")
 st.caption("Regarde la leçon. Une question ? Mets en pause avec « ✋ Poser une question » et demande au prof.")
@@ -139,8 +159,10 @@ def afficher_tableau(reponse: dict | None, reponse_id: str | None, nouvelle: boo
         return
     rendu["fait"] = True
     with col_tableau:
+        # La voix off (~1 Mo) n'est envoyée que tant que le tableau n'a pas confirmé l'avoir reçue.
+        deja = (ss.get("tableau") or {}).get("voix_lecon") == voix_id
         tableau(ss.scene_lecon, lecon_id, reponse=reponse, reponse_id=reponse_id, nouvelle_reponse=nouvelle,
-                audio=audio if nouvelle else None)
+                audio=audio if nouvelle else None, voix=voix_wavs, voix_id=voix_id, envoyer_voix=not deja)
 
 
 with col_qr:

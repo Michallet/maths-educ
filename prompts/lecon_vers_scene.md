@@ -7,6 +7,7 @@ Ton travail doit être **reproductible** : deux fiches de même structure doiven
 2. Ce qui suit « → » dans une ligne du déroulé indique ce qui doit apparaître au tableau : traduis-le en actions. Si rien n'est indiqué, mets une seule action utile ou aucune.
 3. Le `titre` et le `niveau` de la scène sont ceux de l'en-tête de la fiche.
 4. Les sous-titres : une phrase courte, parlée, au tutoiement, sans répéter mot pour mot la formule qui s'écrit au même moment. 70 caractères au maximum.
+4 bis. Chaque étape a une `voix` : la phrase que le prof dit, un peu plus naturelle et complète que le sous-titre, au tutoiement, 30 mots au maximum, sans aucun symbole mathématique (tout en toutes lettres).
 5. N'invente aucun contenu mathématique absent de la fiche. Les valeurs numériques doivent être exactes.
 6. La dernière étape est la conclusion : elle porte `"duree_min": 3`.
 7. Vérifie la place : au plus 3 formules visibles en même temps (efface la zone « formules » avant d'écrire une 4e), toutes les courbes et points tiennent dans les bornes du repère.

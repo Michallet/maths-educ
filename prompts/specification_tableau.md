@@ -17,10 +17,12 @@ Un seul objet JSON :
   "titre": "texte court (≤ 28 caractères)",
   "niveau": "ex. Maths · 1re spé",
   "etapes": [
-    { "sous_titre": "phrase courte (≤ 70 caractères)", "duree_min": 0, "actions": [ ... ] }
+    { "sous_titre": "phrase courte (≤ 70 caractères)", "voix": "ce que dit le prof", "duree_min": 0, "actions": [ ... ] }
   ]
 }
 ```
+
+`voix` (leçons uniquement) : ce que le professeur dit à voix haute pendant l'étape, lu par une voix de synthèse. 1 à 2 phrases, 30 mots au maximum, maths écrites comme on les dit (« e puissance x », « f prime »), sans `^{}`, sans symbole. L'étape dure au moins le temps de cette phrase.
 
 Les actions d'une étape se jouent l'une après l'autre ; `"en_meme_temps": true` lance une action en même temps que la précédente. Les éléments restent au tableau jusqu'à une action `effacer`. `duree_min` (secondes, facultatif) allonge une étape, par exemple la dernière.
 

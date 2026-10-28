@@ -113,6 +113,7 @@
     <button class="ctl" id="btn-play" type="button" aria-label="Lire"></button>
     <input type="range" id="scrub" min="0" max="1000" step="10" value="0" aria-label="Position">
     <span class="time" id="time">0:00 / 0:00</span>
+    <button class="ctl" id="btn-son" type="button" aria-label="Couper le son"></button>
     <button class="ctl" id="btn-replay" type="button" aria-label="Revenir au début">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
     </button>
@@ -505,7 +506,8 @@
       });
       var mots = texteBrut(etape.sous_titre || '').split(/\s+/).filter(Boolean).length;
       var lecture = etape.sous_titre ? Math.max(2.2, .8 + .36 * mots) : 0;
-      var fin = Math.max(cur + .5, debut + lecture, debut + num(etape.duree_min, 0));
+      var voix = num(etape.duree_voix, 0);
+      var fin = Math.max(cur + .5, debut + lecture, debut + num(etape.duree_min, 0), voix ? debut + voix + .35 : 0);
       etapes.push({ debut: debut, fin: fin, sous_titre: etape.sous_titre || '' });
       t = fin;
     });
@@ -575,7 +577,40 @@
   var ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';
   var ICON_REPLAY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>';
 
-  var etat = { mode: 'lecon', lecon: null, reponse: null, t: 0, tLecon: 0, joue: false, leconId: null, reponseId: null, compteur: 0, audio: null };
+  var etat = { mode: 'lecon', lecon: null, reponse: null, t: 0, tLecon: 0, joue: false, leconId: null, reponseId: null, compteur: 0, audio: null, voixLecon: [], voixId: null, muet: false, dernierEvt: {} };
+  window.__etat = etat;  // débogage depuis la console
+  var btnSon = document.getElementById('btn-son');
+  var ICON_SON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
+  var ICON_MUET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>';
+  function toutesVoix() { return etat.voixLecon.filter(Boolean).concat(etat.audio ? [etat.audio] : []); }
+  function appliquerMuet() {
+    toutesVoix().forEach(function (a) { a.muted = etat.muet; });
+    btnSon.innerHTML = etat.muet ? ICON_MUET : ICON_SON;
+    btnSon.setAttribute('aria-label', etat.muet ? 'Remettre le son' : 'Couper le son');
+  }
+  function lecture(a) {
+    if (!a.paused || a._attente) return;
+    a._attente = true;
+    var pr = a.play();
+    var fin = function () { a._attente = false; };
+    if (pr && pr.then) pr.then(fin, function () { fin(); etat.joue = false; voixStop(); majUI(); });
+    else fin();
+  }
+  // Voix off de la leçon : un extrait par étape, lancé au début de l'étape et recalé sur la timeline.
+  function syncVoixLecon() {
+    var T = etat.lecon;
+    if (!T || !etat.voixLecon.length) return;
+    var i = etat.mode === 'lecon' && etat.joue ? T.etapeA(etat.t) : -1;
+    etat.voixLecon.forEach(function (a, k) {
+      if (!a) return;
+      var e = T.etapes[k], off = e ? etat.t - e.debut : -1;
+      var actif = k === i && off >= 0 && off < (e.duree_voix || 0);
+      if (!actif) { if (!a.paused) a.pause(); return; }
+      if (Math.abs(a.currentTime - off) > .3) { try { a.currentTime = off; } catch (err) { } }
+      lecture(a);
+    });
+  }
+  function voixLeconParle() { return etat.voixLecon.some(function (a) { return a && !a.paused && !a.ended; }); }
 
   // ---------- Voix de la réponse : jouée par le tableau, calée sur la timeline ----------
   function voixActive() { return etat.mode === 'reponse' && etat.audio ? etat.audio : null; }
@@ -592,7 +627,7 @@
     // Lecture refusée par le navigateur (autoplay) : on met en pause, le bouton ▶ relance tout.
     if (pr && pr.catch) pr.catch(function () { etat.joue = false; majUI(); });
   }
-  function voixStop() { if (etat.audio) { try { etat.audio.pause(); } catch (e) { } } }
+  function voixStop() { toutesVoix().forEach(function (a) { try { a.pause(); } catch (e) { } }); }
   function tl() { return etat.mode === 'lecon' ? etat.lecon : etat.reponse; }
 
   function fmt(s) { s = Math.floor(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
@@ -626,7 +661,7 @@
     var ang = ecrit && etat.joue ? -8 + 6 * Math.sin(maintenant * .02) : 0;
     arm.setAttribute('transform', 'rotate(' + ang.toFixed(2) + ')');
     // Bouche : parle quand un sous-titre est affiché
-    var parle = etat.joue && (voixActive() ? voixParle() : op > .5);
+    var parle = etat.joue && (voixActive() ? voixParle() : etat.mode === 'lecon' && etat.voixLecon.length ? voixLeconParle() : op > .5);
     var sy = parle ? .35 + .85 * Math.abs(Math.sin(maintenant * .024)) : .35;
     mouth.setAttribute('transform', 'translate(50 86) scale(1 ' + sy.toFixed(2) + ') translate(-50 -86)');
     // Sourcils : se lèvent au début de chaque étape
@@ -646,6 +681,7 @@
       if (voixParle()) etat.t = voixActive().currentTime; else etat.t += Math.min(dt, .1);
       if (etat.t >= T.duree) { etat.t = T.duree; etat.joue = false; voixStop(); majUI(); }
     }
+    syncVoixLecon();
     rendre();
     clignement(now);
     requestAnimationFrame(boucle);
@@ -664,18 +700,20 @@
     var t = etat.mode === 'lecon' ? etat.t : etat.tLecon;
     var i = T.etapeA(t);
     etat.compteur++;
-    setValeur({ evenement: evenement, t: Math.round(t * 10) / 10, etape: i, nb_etapes: T.etapes.length, n: etat.compteur });
+    etat.dernierEvt = { evenement: evenement, t: Math.round(t * 10) / 10, etape: i, nb_etapes: T.etapes.length, n: etat.compteur };
+    setValeur(etat.dernierEvt);
   }
 
   stage.addEventListener('click', function (e) { if (e.target.closest('#overlay')) return; basculer(); });
   overlay.addEventListener('click', function (e) { e.stopPropagation(); jouer(); });
   btnPlay.addEventListener('click', basculer);
+  btnSon.addEventListener('click', function () { etat.muet = !etat.muet; appliquerMuet(); });
   btnReplay.addEventListener('click', function () { etat.t = 0; rendre(); jouer(); });
   scrub.addEventListener('input', function () { etat.t = Number(scrub.value) / 1000; if (etat.joue) voixJouer(); else voixCaler(); rendre(); majUI(); });
   btnQuestion.addEventListener('click', function () { etat.joue = false; majUI(); envoyerPosition('question'); });
   btnReprendre.addEventListener('click', function () {
     voixStop(); etat.mode = 'lecon'; etat.t = etat.tLecon; majUI(); rendre(); jouer();
-    etat.compteur++; setValeur({ evenement: 'reprise', n: etat.compteur });
+    etat.compteur++; etat.dernierEvt = { evenement: 'reprise', n: etat.compteur }; setValeur(etat.dernierEvt);
   });
   document.addEventListener('keydown', function (e) {
     if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); basculer(); }
@@ -683,7 +721,7 @@
 
   // ---------- Protocole des composants Streamlit ----------
   function envoyer(type, data) { window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data || {}), '*'); }
-  function setValeur(v) { envoyer('streamlit:setComponentValue', { value: v, dataType: 'json' }); }
+  function setValeur(v) { envoyer('streamlit:setComponentValue', { value: Object.assign({}, v, { voix_lecon: etat.voixId }), dataType: 'json' }); }
   function hauteur() { envoyer('streamlit:setFrameHeight', { height: Math.ceil(document.getElementById('player').getBoundingClientRect().height) + 8 }); }
   new ResizeObserver(hauteur).observe(document.body);
 
@@ -704,12 +742,35 @@
   function surRendu(args, theme) {
     appliquerTheme(theme);
     file = file.then(function () { return policesPretes; }).then(function () {
-      if (args.lecon && args.lecon_id !== etat.leconId) {
+      var voixRecue = args.voix && args.voix_id && args.voix_id !== etat.voixId;
+      if (args.lecon && (args.lecon_id !== etat.leconId || voixRecue)) {
+        var memeLecon = args.lecon_id === etat.leconId;
         etat.leconId = args.lecon_id;
+        voixStop();
+        var scene = JSON.parse(JSON.stringify(args.lecon));
+        etat.voixLecon = [];
+        if (voixRecue) {
+          etat.voixId = args.voix_id;
+          (scene.etapes || []).forEach(function (e, k) {
+            var b64 = args.voix[k], d = Number((args.voix_durees || [])[k] || 0);
+            if (!b64 || !d) { etat.voixLecon.push(null); return; }
+            e.duree_voix = d;
+            var a = new Audio('data:audio/wav;base64,' + b64); a.preload = 'auto';
+            etat.voixLecon.push(a);
+          });
+          setValeur(etat.dernierEvt);  // confirme la réception : Python arrête d'envoyer l'audio
+        } else if (!args.voix_id) {
+          etat.voixId = null;
+        }
         var visible = calqueLecon.style.display; calqueLecon.style.display = '';
-        etat.lecon = construire(args.lecon, calqueLecon, 'lecon');
+        etat.lecon = construire(scene, calqueLecon, 'lecon');
+        etat.lecon.etapes.forEach(function (e, k) { e.duree_voix = (scene.etapes[k] || {}).duree_voix || 0; });
         calqueLecon.style.display = visible;
-        etat.mode = 'lecon'; etat.t = 0; etat.tLecon = 0; etat.joue = false;
+        if (!memeLecon) { etat.mode = 'lecon'; etat.t = 0; etat.tLecon = 0; etat.joue = false; }
+        appliquerMuet();
+      } else if (args.voix_id && args.voix_id !== etat.voixId && !args.voix) {
+        // Python croit l'audio déjà chargé (iframe recréée) : on le redemande.
+        etat.voixId = null; setValeur(etat.dernierEvt);
       }
       if (args.reponse && args.reponse_id && args.reponse_id !== etat.reponseId) {
         etat.reponseId = args.reponse_id;
@@ -720,7 +781,7 @@
           voixStop(); etat.audio = null;
           if (args.audio) {
             etat.audio = new Audio('data:audio/wav;base64,' + args.audio);
-            etat.audio.preload = 'auto';
+            etat.audio.preload = 'auto'; etat.audio.muted = etat.muet;
             // Durée de la réponse = la plus longue entre la scène et la voix.
             etat.reponse.duree = Math.max(etat.reponse.duree, Number(args.duree_audio || 0) + .4);
           }
@@ -736,7 +797,7 @@
     if (d && d.type === 'streamlit:render') surRendu(d.args || {}, d.theme);
   });
   envoyer('streamlit:componentReady', { apiVersion: 1 });
-  majUI(); hauteur();
+  majUI(); appliquerMuet(); hauteur();
   requestAnimationFrame(boucle);
 })();
 </script>
