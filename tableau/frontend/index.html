@@ -742,6 +742,13 @@
   function surRendu(args, theme) {
     appliquerTheme(theme);
     file = file.then(function () { return policesPretes; }).then(function () {
+      // Voix off en préparation côté serveur : on redemande dans 3 s (provoque une réexécution).
+      if (args.voix_statut === 'en_cours' && !etat.minuteurVoix) {
+        etat.minuteurVoix = setTimeout(function () {
+          etat.minuteurVoix = null;
+          setValeur(Object.assign({}, etat.dernierEvt, { attente_voix: Date.now() }));
+        }, 3000);
+      }
       var voixRecue = args.voix && args.voix_id && args.voix_id !== etat.voixId;
       if (args.lecon && (args.lecon_id !== etat.leconId || voixRecue)) {
         var memeLecon = args.lecon_id === etat.leconId;

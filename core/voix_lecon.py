@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 _REMPLACEMENTS = [
@@ -48,6 +50,36 @@ def generer_voix_lecon(moteur, scene: dict) -> tuple[list[bytes | None], list[st
             erreurs.append(f"« {texte[:40]}… » : {e}")
             return None
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         wavs = list(pool.map(un, textes))
     return wavs, erreurs
+
+
+# ---------------------------------------------------------------- préparation en arrière-plan
+_TACHES: dict[str, dict] = {}
+_VERROU = threading.Lock()
+
+
+def voix_en_arriere_plan(cle: str, moteur, scene: dict) -> dict:
+    """Lance la synthèse si besoin et renvoie l'état de la tâche, sans jamais attendre :
+    {"etat": "en_cours" | "pret", "wavs": [...], "erreurs": [...], "debut": t}."""
+    with _VERROU:
+        tache = _TACHES.get(cle)
+        if tache is None:
+            tache = {"etat": "en_cours", "wavs": None, "erreurs": [], "debut": time.time()}
+            _TACHES[cle] = tache
+
+            def travail():
+                try:
+                    wavs, erreurs = generer_voix_lecon(moteur, scene)
+                except Exception as e:  # noqa: BLE001
+                    wavs, erreurs = [], [str(e)]
+                tache.update(wavs=wavs, erreurs=erreurs, etat="pret")
+
+            threading.Thread(target=travail, daemon=True).start()
+        return tache
+
+
+def oublier_voix(cle: str) -> None:
+    with _VERROU:
+        _TACHES.pop(cle, None)

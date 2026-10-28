@@ -31,7 +31,7 @@ Pour une nouvelle leçon : copie `_modele.md` sous un nouveau nom dans `lecons/`
 
 ### Voix off de la leçon
 
-Chaque étape de la scène a un champ `voix` : la phrase que dit le prof, en toutes lettres (« e puissance x »). Au chargement de la leçon, ces phrases sont synthétisées en parallèle, une par étape, puis gardées en cache par le serveur, ce qui fait un seul passage par scène, voix et modèle. Le tableau lance chaque extrait au début de son étape. Si la phrase est plus longue que les tracés, l'étape s'allonge pour l'attendre. Sans champ `voix`, le sous-titre est lu, converti en toutes lettres. Le bouton 🔊 du lecteur coupe ou remet le son ; l'interrupteur « Voix off de la leçon » de la barre latérale la désactive.
+Chaque étape de la scène a un champ `voix` : la phrase que dit le prof, en toutes lettres (« e puissance x »). Ces phrases sont synthétisées **en arrière-plan**, une par étape : la leçon s'affiche tout de suite, sans le son, et le tableau redemande toutes les 3 s si la voix est prête. La voix est ensuite gardée en mémoire par le serveur (une seule synthèse par scène, voix et modèle). Chaque appel Gemini est limité à 40 s. Le tableau lance chaque extrait au début de son étape. Si la phrase est plus longue que les tracés, l'étape s'allonge pour l'attendre. Sans champ `voix`, le sous-titre est lu, converti en toutes lettres. Le bouton 🔊 du lecteur coupe ou remet le son ; l'interrupteur « Voix off de la leçon » de la barre latérale la désactive.
 
 L'audio n'est envoyé au tableau qu'une fois : le tableau confirme sa réception et Python cesse ensuite de le renvoyer.
 

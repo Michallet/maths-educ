@@ -35,7 +35,10 @@ class MoteurGemini:
         from google import genai  # import paresseux : le mode démo n'en a pas besoin
 
         self.r = r
-        self.client = genai.Client(api_key=r.cle)
+        from google.genai import types
+
+        # Aucun appel ne doit bloquer l'app indéfiniment : 40 s maximum par requête.
+        self.client = genai.Client(api_key=r.cle, http_options=types.HttpOptions(timeout=40_000))
         self._reflexion_ok = bool(r.reflexion)
 
     # -- configuration commune ------------------------------------------------
