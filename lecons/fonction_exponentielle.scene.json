@@ -5,70 +5,89 @@
     {
       "sous_titre": "Une seule fonction est égale à sa propre dérivée et vaut 1 en 0…",
       "voix": "Il existe une seule fonction qui est [1]égale à sa propre dérivée, et qui vaut un en zéro.",
+      "audio": "medias/fonction_exponentielle/01.mp3",
+      "duree_voix": 4.75,
       "actions": [
-        {"type": "formule", "ligne": 1, "texte": "f' = f  et  f(0) = 1"}
+        {"type": "formule", "ligne": 1, "texte": "f' = f  et  f(0) = 1", "debut": 1.41}
       ]
     },
     {
       "sous_titre": "C'est l'exponentielle : on la note exp(x) ou e^{x}.",
       "voix": "C'est la fonction exponentielle. On la note [1]exp de x, ou e puissance x.",
+      "audio": "medias/fonction_exponentielle/02.mp3",
+      "duree_voix": 5.47,
       "actions": [
-        {"type": "formule", "ligne": 2, "texte": "exp(x) = e^{x}", "couleur": "bleu"}
+        {"type": "formule", "ligne": 2, "texte": "exp(x) = e^{x}", "couleur": "bleu", "debut": 2.67}
       ]
     },
     {
       "sous_titre": "Traçons sa courbe.",
       "voix": "On trace [1]un repère, puis [2]la courbe de l'exponentielle.",
+      "audio": "medias/fonction_exponentielle/03.mp3",
+      "duree_voix": 3.58,
       "actions": [
-        {"type": "repere", "xmin": -3, "xmax": 3, "ymin": -1, "ymax": 8, "pas_x": 1, "pas_y": 2},
-        {"type": "courbe", "expr": "exp(x)", "couleur": "bleu", "label": "y = e^{x}", "label_x": 1.6, "position_label": "hg"}
+        {"type": "repere", "xmin": -3, "xmax": 3, "ymin": -1, "ymax": 8, "pas_x": 1, "pas_y": 2, "debut": 0.44},
+        {"type": "courbe", "expr": "exp(x)", "couleur": "bleu", "label": "y = e^{x}", "label_x": 1.6, "position_label": "hg", "debut": 1.39}
       ]
     },
     {
       "sous_titre": "Elle passe par (0 ; 1) : e^{0} = 1.",
       "voix": "Elle passe par [1]le point zéro, un : e puissance zéro vaut un.",
+      "audio": "medias/fonction_exponentielle/04.mp3",
+      "duree_voix": 3.65,
       "actions": [
-        {"type": "point", "x": 0, "y": 1, "label": "(0 ; 1)", "couleur": "jaune", "position_label": "hg"}
+        {"type": "point", "x": 0, "y": 1, "label": "(0 ; 1)", "couleur": "jaune", "position_label": "hg", "debut": 0.54}
       ]
     },
     {
       "sous_titre": "En x = 1, elle vaut e ≈ 2,718.",
       "voix": "Et en x égale un, [1][2]elle vaut [3]le nombre e, environ deux virgule sept un huit.",
+      "audio": "medias/fonction_exponentielle/05.mp3",
+      "duree_voix": 4.56,
       "actions": [
-        {"type": "segment", "de": [1, 0], "a": [1, 2.718], "pointille": true},
-        {"type": "segment", "de": [0, 2.718], "a": [1, 2.718], "pointille": true, "en_meme_temps": true},
-        {"type": "point", "x": 1, "y": 2.718, "label": "(1 ; e)", "couleur": "jaune", "position_label": "hg"}
+        {"type": "segment", "de": [1, 0], "a": [1, 2.718], "pointille": true, "debut": 1.12},
+        {"type": "segment", "de": [0, 2.718], "a": [1, 2.718], "pointille": true, "en_meme_temps": true, "debut": 1.12},
+        {"type": "point", "x": 1, "y": 2.718, "label": "(1 ; e)", "couleur": "jaune", "position_label": "hg", "debut": 1.39}
       ]
     },
     {
       "sous_titre": "Sa tangente en 0 a pour équation y = x + 1.",
       "voix": "[1]Sa tangente en zéro a pour équation y égale x plus un.",
+      "audio": "medias/fonction_exponentielle/06.mp3",
+      "duree_voix": 3.55,
       "actions": [
-        {"type": "tangente", "expr": "exp(x)", "x0": 0, "longueur": 3.4, "couleur": "jaune", "label": "y = x + 1", "position_label": "bd"}
+        {"type": "tangente", "expr": "exp(x)", "x0": 0, "longueur": 3.4, "couleur": "jaune", "label": "y = x + 1", "position_label": "bd", "debut": 0.0}
       ]
     },
     {
       "sous_titre": "Sa dérivée e^{x} est toujours > 0 : elle est strictement croissante !",
       "voix": "Sa dérivée, e puissance x, est [1]toujours strictement positive. Donc la fonction est strictement croissante !",
+      "audio": "medias/fonction_exponentielle/07.mp3",
+      "duree_voix": 7.13,
       "actions": [
-        {"type": "formule", "ligne": 3, "texte": "e^{x} > 0", "couleur": "vert"}
+        {"type": "formule", "ligne": 3, "texte": "e^{x} > 0", "couleur": "vert", "debut": 1.98}
       ]
     },
     {
       "sous_titre": "La règle d'or : une somme dans l'exposant devient un produit.",
       "voix": "Et voici [1]la règle d'or : [2]e puissance a plus b, c'est e puissance a fois e puissance b.",
+      "audio": "medias/fonction_exponentielle/08.mp3",
+      "duree_voix": 5.02,
       "actions": [
-        {"type": "effacer", "cible": "formules"},
-        {"type": "formule", "ligne": 1, "texte": "e^{a+b} = e^{a} × e^{b}", "couleur": "jaune", "encadre": true}
+        {"type": "effacer", "cible": "formules", "debut": 0.47},
+        {"type": "formule", "ligne": 1, "texte": "e^{a+b} = e^{a} × e^{b}", "couleur": "jaune", "encadre": true, "debut": 1.28}
       ]
     },
     {
       "sous_titre": "À retenir ! Prochain épisode : les équations avec e^{x}.",
       "voix": "À retenir : [1]la dérivée de e puissance x, c'est e puissance x. Prochain épisode : les équations avec l'exponentielle !",
       "duree_min": 3,
+      "audio": "medias/fonction_exponentielle/09.mp3",
+      "duree_voix": 7.82,
       "actions": [
-        {"type": "formule", "ligne": 2, "texte": "(e^{x})' = e^{x}", "couleur": "rose", "encadre": true}
+        {"type": "formule", "ligne": 2, "texte": "(e^{x})' = e^{x}", "couleur": "rose", "encadre": true, "debut": 0.85}
       ]
     }
-  ]
+  ],
+  "voix_signature": "dd31d4f33945"
 }
