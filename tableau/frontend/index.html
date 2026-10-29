@@ -767,7 +767,7 @@
           etat.reponse = construire(args.reponse, calqueReponse, 'reponse');
           voixStop(); etat.audio = null;
           if (args.audio) {
-            etat.audio = new Audio('data:audio/wav;base64,' + args.audio);
+            etat.audio = new Audio('data:' + (args.audio_mime || 'audio/wav') + ';base64,' + args.audio);
             etat.audio.preload = 'auto'; etat.audio.muted = etat.muet;
             // Durée de la réponse = la plus longue entre la scène et la voix.
             etat.reponse.duree = Math.max(etat.reponse.duree, Number(args.duree_audio || 0) + .4);

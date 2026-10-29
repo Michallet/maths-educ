@@ -141,6 +141,8 @@ def normaliser_scene(brut: Any, max_etapes: int = 14, max_actions: int = 8) -> t
         "niveau": str(brut.get("niveau", ""))[:30],
         "etapes": [],
     }
+    if isinstance(brut.get("voix_signature"), str):
+        scene["voix_signature"] = brut["voix_signature"][:40]
     for e in (brut.get("etapes") or [])[:max_etapes]:
         if not isinstance(e, dict):
             continue
@@ -149,7 +151,7 @@ def normaliser_scene(brut: Any, max_etapes: int = 14, max_actions: int = 8) -> t
         if str(e.get("voix", "")).strip():
             etape["voix"] = str(e["voix"]).strip()[:400]
         # Ajoutés par la fabrication (fabriquer_lecon.py) : audio de l'étape et sa durée.
-        if isinstance(e.get("audio"), str) and re.fullmatch(r"medias/[\w-]+/\d+\.wav", e["audio"]):
+        if isinstance(e.get("audio"), str) and re.fullmatch(r"medias/[\w-]+/\d+\.(wav|mp3)", e["audio"]):
             etape["audio"] = e["audio"]
             d = _nombre(e.get("duree_voix"))
             if d:

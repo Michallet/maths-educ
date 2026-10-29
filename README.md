@@ -36,18 +36,24 @@ La leçon est figée, sa voix aussi : elle est **fabriquée une fois**, puis l'a
 - Chaque étape de la scène a un champ `voix` : la phrase que dit le prof, en toutes lettres (« e puissance x »), écrite à la création de la scène avec les sous-titres et les tracés.
 - Des repères `[1]`, `[2]`… dans ce texte indiquent quand chaque action de l'étape doit apparaître : « On trace [1]un repère, puis [2]la courbe de l'exponentielle. »
 - **Fabrication** : chaque phrase est synthétisée (un fichier par étape), sa durée réelle est mesurée, l'étape s'allonge si besoin, et chaque action repérée démarre au moment où le passage est prononcé (estimé d'après la position du repère dans la phrase).
-- Les fichiers vont dans `tableau/frontend/medias/<leçon>/NN.wav`, servis directement au navigateur par le composant tableau. La scène indique pour chaque étape son fichier (`audio`) et sa durée (`duree_voix`).
+- Les fichiers vont dans `tableau/frontend/medias/<leçon>/NN.mp3`, servis directement au navigateur par le composant tableau. La scène indique pour chaque étape son fichier (`audio`) et sa durée (`duree_voix`).
 
-Deux façons de fabriquer :
+Le moteur de voix par défaut est **edge-tts** : voix neuronales Microsoft gratuites, sans clé ni quota Gemini (voix « Henri » par défaut). Il donne l'instant où chaque mot est prononcé, donc les tracés repérés par `[n]` démarrent **au mot près**.
+
+**En pratique, rien à lancer** : la GitHub Action `.github/workflows/voix-lecons.yml` se déclenche à chaque modification d'une scène (`lecons/*.scene.json`), fabrique la voix des leçons dont le texte a changé et recommite l'audio. Community Cloud redéploie ensuite l'app tout seul. On peut aussi la lancer à la main depuis l'onglet **Actions** du dépôt.
+
+À la main si besoin :
 
 ```bash
-# en local, avec GEMINI_API_KEY (ou .streamlit/secrets.toml)
-python fabriquer_lecon.py fonction_exponentielle          # voix de la scène existante
-python fabriquer_lecon.py ma_lecon --scene                # génère aussi la scène depuis la fiche
-git add lecons/ tableau/frontend/medias/ && git commit -m "Voix de la leçon"
+python fabriquer_lecon.py fonction_exponentielle            # edge-tts, sans clé
+python fabriquer_lecon.py --toutes --si-besoin              # ce que fait la GitHub Action
+python fabriquer_lecon.py ma_lecon --scene                  # génère aussi la scène (clé Gemini)
+python fabriquer_lecon.py ma_lecon --tts gemini             # voix Gemini (clé Gemini)
 ```
 
-Ou dans l'app : barre latérale → **🎙️ Voix off de la leçon → Fabriquer la voix**, puis **Télécharger la leçon fabriquée (.zip)**, à dézipper à la racine du dépôt et commiter. Sur Community Cloud, le disque n'est pas persistant : sans ce commit, la voix fabriquée est perdue au redémarrage.
+Ou dans l'app : barre latérale → **🎙️ Voix off de la leçon → Fabriquer la voix**, puis télécharge le zip à dézipper à la racine du dépôt et commiter.
+
+La scène garde une `voix_signature` : tant que les textes `voix` et le réglage de la voix ne changent pas, la leçon n'est pas refabriquée.
 
 Le bouton 🔊 du lecteur coupe ou remet le son.
 
@@ -73,6 +79,8 @@ Les latences de chaque étape s'affichent sous la réponse.
 | `core/moteur.py` | appels Gemini (STT, texte en streaming, JSON, TTS) et moteur de démo |
 | `fabriquer_lecon.py` | fabrication d'une leçon : scène, voix, calage (ligne de commande) |
 | `core/fabrication.py` | logique de fabrication, partagée par le script et l'app |
+| `core/tts.py` | synthèse vocale : edge-tts (MP3 + horodatage des mots) ou Gemini |
+| `.github/workflows/voix-lecons.yml` | fabrique et recommite la voix des leçons modifiées |
 | `core/voix_lecon.py` | texte lu par la voix : toutes lettres, repères [n] |
 | `core/scene.py` | schéma JSON des scènes, nettoyage, résumé de la leçon pour le contexte |
 | `core/prompts.py` | chargement des prompts et des fiches |
@@ -83,4 +91,4 @@ Les latences de chaque étape s'affichent sous la réponse.
 ## Modèles par défaut (modifiables dans la barre latérale)
 
 - Texte, tableau et transcription : `gemini-3.5-flash-lite` (réflexion `minimal`). Les erreurs 503 et 429 sont retentées automatiquement deux fois.
-- Voix : `gemini-3.8-flash-lite-tts` (voix « Charon »). Passe à `gemini-3.8-flash-tts` pour plus de qualité.
+- Voix : **edge-tts** (gratuit, voix « Henri »), pour la leçon comme pour les réponses en direct. Gemini (`gemini-3.8-flash-lite-tts`) reste disponible dans la barre latérale.

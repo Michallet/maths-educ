@@ -12,13 +12,13 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from core.audio import concatener_wav
+from core.tts import Audio, concatener
 from core.scene import normaliser_scene
 
 
 class Affichage(Protocol):
     def texte(self, texte: str, fini: bool) -> None: ...
-    def tableau(self, scene: dict | None, audio: bytes | None) -> None: ...
+    def tableau(self, scene: dict | None, audio: Audio | None) -> None: ...
     def alerte(self, message: str) -> None: ...
 
 
@@ -26,7 +26,7 @@ class Affichage(Protocol):
 class Resultat:
     texte: str = ""
     scene: dict | None = None
-    audio: bytes | None = None
+    audio: Audio | None = None
     latences: dict[str, float] = field(default_factory=dict)
     alertes: list[str] = field(default_factory=list)
 
@@ -132,7 +132,7 @@ def repondre(moteur, systeme_oral: str, systeme_tableau: str, message: str, avec
                     except Exception as e:  # noqa: BLE001
                         res.alertes.append(f"Voix : {e}")
                         ui.alerte(res.alertes[-1])
-                res.audio = concatener_wav(morceaux)
+                res.audio = concatener(morceaux)
                 if res.scene is None and res.audio:
                     res.scene = scene_de_secours()
                 ui.tableau(res.scene, res.audio)

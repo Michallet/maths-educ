@@ -7,7 +7,8 @@ import time
 from dataclasses import dataclass
 from typing import Iterator
 
-from core.audio import assurer_wav, silence_wav
+from core.audio import assurer_wav, duree_wav, silence_wav
+from core.tts import Audio, edge
 from core.scene import SCENE_SCHEMA
 
 CONSIGNE_STT = (
@@ -24,7 +25,9 @@ class Reglages:
     modele_texte: str = "gemini-3.5-flash-lite"
     modele_stt: str = "gemini-3.5-flash-lite"
     modele_tts: str = "gemini-3.8-flash-lite-tts"
-    voix: str = "Charon"
+    voix: str = "Charon"                 # voix Gemini
+    moteur_voix: str = "edge"            # "edge" (gratuit, sans clé) ou "gemini"
+    voix_edge: str = "fr-FR-HenriNeural"
     reflexion: str = "minimal"  # minimal | low | medium | high | "" (défaut du modèle)
 
 
@@ -112,7 +115,13 @@ class MoteurGemini:
         return self._appel(go)
 
     # -- 3. Text-to-speech -------------------------------------------------------
-    def voix(self, texte: str) -> bytes:
+    def voix(self, texte: str) -> Audio:
+        if self.r.moteur_voix == "edge":
+            return edge(texte, self.r.voix_edge)
+        wav = self.voix_gemini(texte)
+        return Audio(wav, "wav", duree_wav(wav))
+
+    def voix_gemini(self, texte: str) -> bytes:
         """Renvoie un WAV. Essaie l'API Interactions (modèles TTS 3.8), puis generateContent."""
         erreurs = []
         try:
@@ -196,9 +205,10 @@ class MoteurDemo:
             ],
         }
 
-    def voix(self, texte: str) -> bytes:
+    def voix(self, texte: str) -> Audio:
         time.sleep(0.8)
-        return silence_wav(min(12.0, 0.33 * len(texte.split())))
+        wav = silence_wav(min(12.0, 0.33 * len(texte.split())))
+        return Audio(wav, "wav", duree_wav(wav))
 
 
 def creer_moteur(r: Reglages):

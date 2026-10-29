@@ -2,9 +2,11 @@
 
 1. La scène (tracés, sous-titres, texte de la voix) vient du fichier JSON existant,
    ou est générée depuis la fiche Markdown.
-2. Le texte `voix` de chaque étape est synthétisé en audio, un fichier par étape.
+2. Le texte `voix` de chaque étape est synthétisé en audio (edge-tts par défaut, gratuit),
+   un fichier par étape.
 3. Calage : la durée réelle de chaque extrait est mesurée, et chaque action marquée
-   par un repère [n] dans le texte de la voix démarre au moment où ce passage est dit.
+   par un repère [n] dans le texte de la voix démarre quand ce mot est prononcé
+   (horodatage mot à mot d'edge-tts).
 
 Les fichiers audio sont rangés dans tableau/frontend/medias/<leçon>/ : le composant
 tableau les sert directement au navigateur (mis en cache), sans passer par Python.
@@ -16,38 +18,75 @@ import time
 import zipfile
 from typing import Callable
 
-from core.audio import duree_wav
 from core.prompts import RACINE, lire_lecon, lire_scene, systeme_lecon_vers_scene
-from core.scene import formater_scene, normaliser_scene
+from core.scene import empreinte, formater_scene, normaliser_scene
+from core.tts import Audio
 from core.voix_lecon import separer_reperes, texte_parle
 
 DOSSIER_MEDIAS = "tableau/frontend/medias"
 
 
-def _voix_avec_reessais(moteur, texte: str, essais: int = 4) -> bytes:
+def _voix_avec_reessais(tts: Callable[[str], Audio], texte: str, essais: int = 3) -> Audio:
     for i in range(essais):
         try:
-            return moteur.voix(texte)
+            return tts(texte)
         except Exception:  # noqa: BLE001
             if i == essais - 1:
                 raise
-            time.sleep(2 * 2 ** i)  # 2 s, 4 s, 8 s : laisse passer les limites de débit
+            time.sleep(2 * 2 ** i)  # 2 s, 4 s : laisse passer les limites de débit
     raise RuntimeError("inaccessible")
 
 
-def caler_actions(etape: dict, duree: float) -> None:
-    """Place le début des actions repérées par [n] dans le texte de la voix."""
-    _, reperes = separer_reperes(etape.get("voix", ""))
+def _instant_du_repere(propre: str, position: int, audio: Audio) -> float | None:
+    """Instant où est prononcé le premier mot situé à `position` (caractères) ou après,
+    d'après les horodatages mot à mot du moteur de voix (edge-tts)."""
+    if not audio.mots:
+        return None
+    bas, curseur = propre.lower(), 0
+    for mot, debut in audio.mots:
+        idx = bas.find(mot.lower(), curseur)
+        if idx < 0:
+            continue
+        curseur = idx + len(mot)
+        if idx + len(mot) > position:
+            return debut
+    return None
+
+
+def caler_actions(etape: dict, audio: Audio) -> None:
+    """Fait démarrer chaque action repérée par [n] quand le passage correspondant est prononcé :
+    au mot près si le moteur fournit les horodatages, sinon d'après la position dans la phrase."""
+    propre, reperes = separer_reperes(etape.get("voix", ""))
     for k, action in enumerate(etape.get("actions", []), start=1):
-        if k in reperes:
-            action["debut"] = round(0.1 + reperes[k] * duree, 2)
-        else:
+        if k not in reperes:
             action.pop("debut", None)
+            continue
+        position = round(reperes[k] * len(propre))
+        instant = _instant_du_repere(propre, position, audio)
+        if instant is None:
+            instant = 0.1 + reperes[k] * audio.duree
+        action["debut"] = round(max(0.0, instant - 0.1), 2)  # le tracé démarre avec le mot
 
 
-def fabriquer(nom: str, moteur, generer_scene: bool = False, scene: dict | None = None,
+def signature_voix(scene: dict, cle_tts: str) -> str:
+    """Change dès qu'un texte de voix ou le réglage de la voix change : il faut alors refabriquer."""
+    return empreinte([cle_tts] + [e.get("voix") or e.get("sous_titre", "") for e in scene.get("etapes", [])])
+
+
+def a_fabriquer(nom: str, cle_tts: str) -> bool:
+    scene = lire_scene(nom)
+    if not scene:
+        return False
+    if scene.get("voix_signature") != signature_voix(scene, cle_tts):
+        return True
+    return any(e.get("audio") and not (RACINE / "tableau/frontend" / e["audio"]).exists() for e in scene["etapes"])
+
+
+def fabriquer(nom: str, tts: Callable[[str], Audio], cle_tts: str, moteur=None, generer_scene: bool = False,
+              scene: dict | None = None,
               progression: Callable[[str, float], None] = lambda msg, frac: print(msg)) -> tuple[dict, dict[str, bytes], list[str]]:
-    """Renvoie (scène finale, {chemin dans le dépôt: contenu}, alertes)."""
+    """Renvoie (scène finale, {chemin dans le dépôt: contenu}, alertes).
+    tts : texte → Audio. moteur : seulement pour générer la scène depuis la fiche."""
     alertes: list[str] = []
     if generer_scene:
         progression("Génération de la scène depuis la fiche…", 0.0)
@@ -69,18 +108,19 @@ def fabriquer(nom: str, moteur, generer_scene: bool = False, scene: dict | None 
         if not texte:
             continue
         try:
-            wav = _voix_avec_reessais(moteur, texte)
+            audio = _voix_avec_reessais(tts, texte)
         except Exception as e:  # noqa: BLE001
             alertes.append(f"Étape {i + 1} sans voix : {e}")
             continue
-        duree = duree_wav(wav)
-        chemin = f"medias/{nom}/{i + 1:02d}.wav"
-        fichiers[f"tableau/frontend/{chemin}"] = wav
+        chemin = f"medias/{nom}/{i + 1:02d}.{audio.format}"
+        fichiers[f"tableau/frontend/{chemin}"] = audio.donnees
         etape["audio"] = chemin
-        etape["duree_voix"] = round(duree, 2)
-        caler_actions(etape, duree)
+        etape["duree_voix"] = round(audio.duree, 2)
+        caler_actions(etape, audio)
         etape["actions"] = etape.pop("actions")  # garde les actions en dernier dans le JSON
 
+    if not alertes or all(not a.startswith("Étape") for a in alertes):
+        scene["voix_signature"] = signature_voix(scene, cle_tts)
     fichiers[f"lecons/{nom}.scene.json"] = formater_scene(scene).encode()
     progression("Terminé.", 1.0)
     return scene, fichiers, alertes
@@ -90,7 +130,7 @@ def ecrire(fichiers: dict[str, bytes], nom: str) -> None:
     """Écrit les fichiers dans le dépôt (en remplaçant l'ancien audio de la leçon)."""
     dossier = RACINE / DOSSIER_MEDIAS / nom
     if dossier.exists():
-        for f in dossier.glob("*.wav"):
+        for f in list(dossier.glob("*.wav")) + list(dossier.glob("*.mp3")):
             f.unlink()
     for chemin, contenu in fichiers.items():
         cible = RACINE / chemin

@@ -18,6 +18,7 @@ from core.prompts import (lire_lecon, lire_scene, lister_lecons, message_questio
                           systeme_reponse_orale, systeme_reponse_tableau)
 from core.scene import empreinte, normaliser_scene, resume_jusqua
 from core.fabrication import ecrire, fabriquer, zipper
+from core.tts import VOIX_EDGE, Audio, DEBIT_DEFAUT, edge
 from tableau import tableau
 
 st.set_page_config(page_title="Prof de maths IA", page_icon="📐", layout="wide")
@@ -65,13 +66,21 @@ with st.sidebar:
     with st.expander("Modèles", expanded=False):
         modele_texte = st.text_input("Réflexion + tableau", "gemini-3.5-flash-lite")
         modele_stt = st.text_input("Transcription (STT)", "gemini-3.5-flash-lite")
-        modele_tts = st.text_input("Voix (TTS)", "gemini-3.8-flash-lite-tts",
-                                   help="gemini-3.8-flash-tts : meilleure qualité ; -lite : plus rapide.")
-        voix = st.selectbox("Voix du prof", VOIX)
+        moteur_voix = st.radio("Moteur de voix", ["edge", "gemini"], horizontal=True,
+                               format_func={"edge": "Edge (gratuit)", "gemini": "Gemini"}.get,
+                               help="Edge : voix Microsoft gratuites, sans clé ni quota Gemini.")
+        if moteur_voix == "edge":
+            voix_edge = VOIX_EDGE[st.selectbox("Voix du prof", list(VOIX_EDGE))]
+            modele_tts, voix = "gemini-3.8-flash-lite-tts", "Charon"
+        else:
+            voix_edge = VOIX_EDGE["Henri (homme)"]
+            modele_tts = st.text_input("Voix (TTS)", "gemini-3.8-flash-lite-tts",
+                                       help="gemini-3.8-flash-tts : meilleure qualité ; -lite : plus rapide.")
+            voix = st.selectbox("Voix du prof", VOIX)
         reflexion = st.selectbox("Niveau de réflexion", ["minimal", "low", "medium", "high", "(défaut du modèle)"],
                                  help="minimal = latence la plus faible.")
     reglages = Reglages(cle=cle.strip(), modele_texte=modele_texte.strip(), modele_stt=modele_stt.strip(),
-                        modele_tts=modele_tts.strip(), voix=voix,
+                        modele_tts=modele_tts.strip(), voix=voix, moteur_voix=moteur_voix, voix_edge=voix_edge,
                         reflexion="" if reflexion.startswith("(") else reflexion)
     moteur = creer_moteur(reglages)
     if isinstance(moteur, MoteurDemo):
@@ -129,7 +138,11 @@ with st.sidebar:
             if st.button("Fabriquer la voix", width="stretch"):
                 barre = st.progress(0.0, "Préparation…")
                 try:
-                    scene, fichiers, alertes = fabriquer(ss.lecon_nom, moteur, scene=ss.scene_lecon,
+                    if moteur_voix == "edge":
+                        tts, cle_tts = (lambda t: edge(t, voix_edge, DEBIT_DEFAUT)), f"edge|{voix_edge}|{DEBIT_DEFAUT}"
+                    else:
+                        tts, cle_tts = moteur.voix, f"gemini|{reglages.modele_tts}|{reglages.voix}"
+                    scene, fichiers, alertes = fabriquer(ss.lecon_nom, tts, cle_tts, scene=ss.scene_lecon,
                                                          progression=lambda m, f: barre.progress(f, m))
                     ecrire(fichiers, ss.lecon_nom)  # servi tout de suite (disque temporaire sur le Cloud)
                     ss.scene_lecon, ss.reponse = scene, None
@@ -162,14 +175,15 @@ col_tableau, col_qr = st.columns([5, 6], gap="large")
 rendu = {"fait": False}
 
 
-def afficher_tableau(reponse: dict | None, reponse_id: str | None, nouvelle: bool, audio: bytes | None = None) -> None:
+def afficher_tableau(reponse: dict | None, reponse_id: str | None, nouvelle: bool, audio: Audio | None = None) -> None:
     """Le composant doit être rendu une seule fois par exécution du script."""
     if rendu["fait"]:
         return
     rendu["fait"] = True
     with col_tableau:
         tableau(ss.scene_lecon, lecon_id, reponse=reponse, reponse_id=reponse_id, nouvelle_reponse=nouvelle,
-                audio=audio if nouvelle else None)
+                audio=audio.donnees if audio and nouvelle else None,
+                audio_mime=audio.mime if audio else "audio/wav", duree_audio=audio.duree if audio else 0)
 
 
 with col_qr:
@@ -227,7 +241,7 @@ with col_qr:
             def texte(self, texte: str, fini: bool) -> None:
                 zone_texte.markdown(texte + ("" if fini else " ▌"))
 
-            def tableau(self, scene: dict | None, audio: bytes | None) -> None:
+            def tableau(self, scene: dict | None, audio: Audio | None) -> None:
                 afficher_tableau(scene, reponse_id if scene else None, scene is not None, audio)
 
             def alerte(self, message: str) -> None:

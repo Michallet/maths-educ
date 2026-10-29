@@ -1,0 +1,60 @@
+# Fabrique la voix off des leçons (edge-tts, gratuit) et recommite l'audio.
+# Se lance tout seul quand une scène change ; aussi déclenchable à la main (onglet Actions).
+name: Voix des leçons
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lecons/*.scene.json"
+      - "core/fabrication.py"
+      - "core/tts.py"
+      - "core/voix_lecon.py"
+      - ".github/workflows/voix-lecons.yml"
+  workflow_dispatch:
+    inputs:
+      tout_refaire:
+        description: "Refabriquer toutes les leçons, même à jour"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: voix-lecons
+  cancel-in-progress: false
+
+jobs:
+  fabriquer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer les dépendances de fabrication
+        run: pip install edge-tts mutagen google-genai
+
+      - name: Fabriquer la voix des leçons modifiées
+        run: |
+          if [ "${{ inputs.tout_refaire }}" = "true" ]; then
+            python fabriquer_lecon.py --toutes
+          else
+            python fabriquer_lecon.py --toutes --si-besoin
+          fi
+
+      - name: Commiter l'audio
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lecons tableau/frontend/medias
+          if git diff --cached --quiet; then
+            echo "Rien de nouveau."
+          else
+            git commit -m "Voix des leçons fabriquée automatiquement (edge-tts)"
+            git push
+          fi
